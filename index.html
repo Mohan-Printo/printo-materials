@@ -1109,10 +1109,10 @@ async function _fetchAll(table) {
     const mats = await _fetchAll('materials');
 
     _prog(50, 'Loading stock parameters...');
-    const vms  = await _fetchAll('vm_params');
+    const vms  = await _fetchAll('RM Classification-VM');
 
     _prog(80, 'Loading consumption data...');
-    const cons = await _fetchAll('consumption');
+    const cons = await _fetchAll('Cons-2025');
 
     _prog(95, 'Building dashboard...');
 
@@ -1249,7 +1249,7 @@ const MODAL_FORMS = {
     ]
   },
   vm_params: {
-    table: 'vm_params',
+    table: 'RM Classification-VM',
     fields: [
       {name:'sku',label:'SKU',type:'text',required:true,half:false},
       {name:'avg_unit_price',label:'Avg Unit Price',type:'number',half:true},
@@ -1274,7 +1274,7 @@ const MODAL_FORMS = {
     ]
   },
   consumption: {
-    table: 'consumption',
+    table: 'Cons-2025',
     fields: [
       {name:'sku',label:'SKU',type:'text',required:true,half:false},
       {name:'material_desc',label:'Material Description',type:'text',half:false},
