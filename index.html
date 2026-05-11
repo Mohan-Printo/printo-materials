@@ -599,7 +599,6 @@
     <button class="tab" data-menu="regions" aria-expanded="false">Region <span class="chev">▾</span></button>
     <button class="tab" data-menu="criticality" aria-expanded="false">Priority <span class="chev">▾</span></button>
     <button class="tab" data-menu="status" aria-expanded="false">Status <span class="chev">▾</span></button>
-    <button class="tab" data-menu="reorder" aria-expanded="false">Reorder Type <span class="chev">▾</span></button>
     <button class="tab tab-special" data-tab="analytics">Analytics</button>
   </div>
 </div>
@@ -647,15 +646,13 @@
     <div class="menu-heading">Material Status</div>
     <div id="status-list"></div>
   </div>
-</div>
-
-<div class="menu" id="menu-config"></div>
-<div class="menu" id="menu-reorder" data-menu-id="reorder">
   <div class="menu-section">
-    <div class="menu-heading">Reorder type</div>
+    <div class="menu-heading">Reorder Type</div>
     <div id="reorder-list"></div>
   </div>
 </div>
+
+<div class="menu" id="menu-config"></div>
 
 <main>
   <!-- TABLE VIEW -->
@@ -729,9 +726,9 @@
     </div>
     <div class="modal-tabs">
       <button class="mtab active" data-mtab="material">Material</button>
-      <button class="mtab" data-mtab="vm_params">VM Params</button>
+      <button class="mtab" data-mtab="vm_params">RM Classification-VM</button>
       <button class="mtab" data-mtab="vendor">Vendor</button>
-      <button class="mtab" data-mtab="consumption">Consumption</button>
+      <button class="mtab" data-mtab="consumption">Cons-2025</button>
     </div>
     <div class="modal-body" id="modal-body"></div>
     <div class="modal-ft">
@@ -748,7 +745,7 @@ let DATA = [];
 
 const REGIONS=[{key:"BLR",name:"Bangalore",flag:"blr",label:"B"},{key:"CHN",name:"Chennai",flag:"chn",label:"C"},{key:"HYD",name:"Hyderabad",flag:"hyd",label:"H"},{key:"PUN",name:"Pune",flag:"pun",label:"P"},{key:"NCR",name:"Delhi NCR",flag:"ncr",label:"D"}];
 const CRIT_ORDER=[{key:"V.High",label:"Very High",cls:"vhigh",note:"CRITICAL"},{key:"High",label:"High",cls:"high",note:"PRIORITY"},{key:"Med",label:"Medium",cls:"med",note:"STANDARD"},{key:"Low",label:"Low",cls:"low",note:"NON-CRITICAL"}];
-const state={search:"",major:null,category:null,region:null,criticality:null,status:null,reorder:null,view:"table"};
+const state={search:"",major:null,category:null,region:null,criticality:null,status:"Active",reorder:null,view:"table"};
 
 function isDiscontinued(r){return r.blr==="Discontinued"}
 function activeCityCount(r){if(isDiscontinued(r))return 0;return REGIONS.filter(c=>r[c.flag]&&r[c.flag]!=="Discontinued").length}
@@ -772,11 +769,17 @@ function populateMenus(){
   document.getElementById("region-list").innerHTML=REGIONS.map(r=>{const n=DATA.filter(d=>d[r.flag]&&d[r.flag]!=="Discontinued").length;return`<button class="menu-item" data-action="region" data-value="${r.key}"><span>${r.name}</span><span class="count">${r.key} · ${n}</span></button>`}).join("");
   document.getElementById("criticality-list").innerHTML=CRIT_ORDER.map(c=>{const n=DATA.filter(d=>d.criticality===c.key).length;return`<button class="menu-item" data-action="criticality" data-value="${c.key}"><span>${c.label}</span><span class="count">${c.note} · ${n}</span></button>`}).join("");
   const nA=DATA.filter(d=>!isDiscontinued(d)).length,nD=DATA.filter(d=>isDiscontinued(d)).length;
-  document.getElementById("status-list").innerHTML=`<button class="menu-item" data-action="status" data-value="Active"><span>Active</span><span class="count">${nA}</span></button><button class="menu-item" data-action="status" data-value="Discontinued"><span>Discontinued</span><span class="count">${nD}</span></button>`;
-  const reorderTypes = [...new Set(DATA.map(r=>r.regions?.BLR?.str_reorder).filter(Boolean))].sort();
-  document.getElementById("reorder-list").innerHTML = reorderTypes.map(t=>{
-    const n=DATA.filter(d=>d.regions?.BLR?.str_reorder===t).length;
-    return`<button class="menu-item" data-action="reorder" data-value="${t}"><span>${t}</span><span class="count">${n}</span></button>`;
+  const nB=DATA.filter(d=>!d.str_reorder_type).length;
+  document.getElementById("status-list").innerHTML=`
+    <button class="menu-item selected" data-action="status" data-value="Active"><span>Active only</span><span class="count">${nA}</span></button>
+    <button class="menu-item" data-action="status" data-value="all"><span>Show all</span><span class="count">${DATA.length}</span></button>
+    <button class="menu-item" data-action="status" data-value="Discontinued"><span>Discontinued only</span><span class="count">${nD}</span></button>
+    <button class="menu-item" data-action="status" data-value="Blank"><span>No reorder type (blank)</span><span class="count">${nB}</span></button>`;
+  const allVals=DATA.flatMap(r=>[r.regions?.BLR?.str_reorder,r.regions?.CHN?.str_reorder,r.regions?.HYD?.str_reorder,r.regions?.NCR?.str_reorder,r.regions?.PUN?.str_reorder,r.str_reorder_type]).filter(Boolean);
+  const reorderTypes=[...new Set(allVals)].sort();
+  document.getElementById("reorder-list").innerHTML=reorderTypes.map(t=>{
+    const n=DATA.filter(d=>{const vals=[d.regions?.BLR?.str_reorder,d.regions?.CHN?.str_reorder,d.regions?.HYD?.str_reorder,d.regions?.NCR?.str_reorder,d.regions?.PUN?.str_reorder,d.str_reorder_type];return vals.some(v=>v===t);}).length;
+    return`<button class="menu-item" data-action="reorder" data-value="${t}"><span>${reorderPill(t)}</span><span class="count">${n}</span></button>`;
   }).join('');
 }
 
@@ -792,8 +795,17 @@ function applyFilters(){
       else{const reg=REGIONS.find(x=>x.key===state.region);if(!reg)return false;if(!r[reg.flag]||r[reg.flag]==="Discontinued")return false}
     }
     if(state.criticality&&r.criticality!==state.criticality)return false;
-    if(state.reorder&&r.regions?.BLR?.str_reorder!==state.reorder)return false;
-    if(state.status){if(state.status==="Active"&&isDiscontinued(r))return false;if(state.status==="Discontinued"&&!isDiscontinued(r))return false}
+    if(state.reorder){
+      const allReorders=[r.regions?.BLR?.str_reorder,r.regions?.CHN?.str_reorder,r.regions?.HYD?.str_reorder,r.regions?.NCR?.str_reorder,r.regions?.PUN?.str_reorder,r.str_reorder_type];
+      if(!allReorders.some(v=>v===state.reorder))return false;
+    }
+    if(state.status&&state.status!=="all"){
+      const _rv=r.str_reorder_type;
+      const _hasR=_rv&&String(_rv).trim()!==""&&String(_rv).trim()!=="null";
+      if(state.status==="Active"&&(isDiscontinued(r)||!_hasR))return false;
+      if(state.status==="Discontinued"&&!isDiscontinued(r))return false;
+      if(state.status==="Blank"&&_hasR)return false;
+    }
     return true;
   });
 }
@@ -801,9 +813,9 @@ function applyFilters(){
 function renderHead(){
   const thead=document.getElementById("thead");
   if(isSpecificRegion()){
-    thead.innerHTML=`<tr><th style="width:110px">SKU</th><th>Description</th><th style="width:160px">Vendor</th><th class="num" style="width:90px">Lead Time</th><th style="width:140px">Reorder Type</th><th class="num" style="width:120px">3-Mo Cons.</th><th style="width:100px">Priority</th><th class="num" style="width:90px">Stock</th><th style="width:100px">Status</th></tr>`;
+    thead.innerHTML=`<tr><th style="width:110px">SKU</th><th>Description</th><th style="width:160px">Vendor</th><th class="num" style="width:90px">Lead Time</th><th style="width:140px">Reorder Type</th><th class="num" style="width:120px">3-Mo Cons.</th><th style="width:100px">Priority</th><th class="num" style="width:90px">Stock</th><th style="width:140px">Reorder Type</th></tr>`;
   }else{
-    thead.innerHTML=`<tr><th style="width:110px">SKU</th><th>Description</th><th style="width:170px">Category</th><th style="width:130px">Cities</th><th style="width:100px">Priority</th><th class="num" style="width:90px">Stock</th><th class="num" style="width:130px">Cons. / Month</th><th style="width:100px">Status</th></tr>`;
+    thead.innerHTML=`<tr><th style="width:110px">SKU</th><th>Description</th><th style="width:170px">Category</th><th style="width:130px">Cities</th><th style="width:100px">Priority</th><th class="num" style="width:90px">Stock</th><th class="num" style="width:130px">Cons. / Month</th><th style="width:140px">Reorder Type</th></tr>`;
   }
 }
 
@@ -835,10 +847,10 @@ function rowHTML(r,idx){
   let cells;
   if(isSpecificRegion()){
     const info=r.regions[state.region]||{};
-    cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="vendor-cell">${vendorCell(info.vendor,info.vendor_alt)}</td><td class="${info.lead_time==null?"num muted":"num"}">${info.lead_time!=null?info.lead_time+' <span class="unit">d</span>':"—"}</td><td class="reorder-cell">${reorderPill(info.str_reorder)}${info.ordering_frequency!=null?`<span class="freq">every ${info.ordering_frequency}d</span>`:""}</td><td class="${info.consumption_3mo==null?"num muted":"num"}">${fmtConsumption(info.consumption_3mo)} ${info.consumption_3mo!=null&&r.uom?`<span class="unit">${r.uom}</span>`:""}</td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td>${status}</td>`;
+    cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="vendor-cell">${vendorCell(info.vendor,info.vendor_alt)}</td><td class="${info.lead_time==null?"num muted":"num"}">${info.lead_time!=null?info.lead_time+' <span class="unit">d</span>':"—"}</td><td class="reorder-cell">${reorderPill(info.str_reorder)}${info.ordering_frequency!=null?`<span class="freq">every ${info.ordering_frequency}d</span>`:""}</td><td class="${info.consumption_3mo==null?"num muted":"num"}">${fmtConsumption(info.consumption_3mo)} ${info.consumption_3mo!=null&&r.uom?`<span class="unit">${r.uom}</span>`:""}</td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td>${reorderPill(info.str_reorder)}</td>`;
   }else{
     const cities=REGIONS.map(c=>{const v=r[c.flag];if(v==="Discontinued")return`<span class="city discon" title="Discontinued">${c.label}</span>`;if(v)return`<span class="city on" title="${c.name}">${c.label}</span>`;return`<span class="city" title="Not in ${c.name}">${c.label}</span>`}).join("");
-    cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="cat-cell"><span class="major">${r.major_category}</span>${r.category}</td><td><div class="cities">${cities}</div></td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td class="${r.consumption_month==null?"num muted":"num"}">${fmtConsumption(r.consumption_month)} ${r.consumption_month!=null&&r.uom?`<span class="unit">${r.uom}/mo</span>`:""}</td><td>${status}</td>`;
+    cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="cat-cell"><span class="major">${r.major_category}</span>${r.category}</td><td><div class="cities">${cities}</div></td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td class="${r.consumption_month==null?"num muted":"num"}">${fmtConsumption(r.consumption_month)} ${r.consumption_month!=null&&r.uom?`<span class="unit">${r.uom}/mo</span>`:""}</td><td>${reorderPill(r.str_reorder_type)}</td>`;
   }
   const detailHTML=`
     <div class="detail-section"><h5>Material Details</h5>
@@ -904,7 +916,7 @@ function renderChips(targetId,emptyId){
   if(state.category)items.push({type:"category",label:state.category,isRegion:false});
   if(state.region){let l=state.region;if(state.region==="multi")l="Multi-City";else if(state.region==="single")l="Single-City";else if(state.region==="all")l="All Cities";else{const reg=REGIONS.find(x=>x.key===state.region);l=reg?reg.name:state.region}items.push({type:"region",label:l,isRegion:isSpecificRegion()})}
   if(state.criticality){const m=CRIT_ORDER.find(x=>x.key===state.criticality);items.push({type:"criticality",label:m?m.label:state.criticality,isRegion:false})}
-  if(state.status)items.push({type:"status",label:state.status,isRegion:false});
+  if(state.status&&state.status!=="Active")items.push({type:"status",label:state.status==="all"?"Showing all":state.status==="Blank"?"Blank reorder type":state.status,isRegion:false});
   if(state.reorder)items.push({type:"reorder",label:state.reorder,isRegion:false});
   if(items.length===0){el.innerHTML="";noFilters.style.display="inline";return}
   noFilters.style.display="none";
@@ -961,7 +973,10 @@ document.body.addEventListener("click",(e)=>{
     else if(action==="category"){state.category=value;const r=DATA.find(d=>d.category===value);if(r)state.major=r.major_category}
     else if(action==="region")state.region=value;
     else if(action==="criticality")state.criticality=value;
-    else if(action==="status")state.status=value;
+    else if(action==="status"){
+      state.status=value;
+      document.querySelectorAll('#menu-status .menu-item[data-action="status"]').forEach(el=>el.classList.toggle('selected',el.dataset.value===value));
+    }
     else if(action==="reorder")state.reorder=value;
     closeAllMenus();switchView("table");return;
   }
@@ -1135,7 +1150,7 @@ async function _fetchAll(table) {
         major_category: m.major_category || '',
         cat_manager: m.cat_mgr || '',
         unit_price: parseFloat(vm.avg_unit_price) || null,
-        closing_stock: parseFloat(m.closing_stock) || null,
+        closing_stock: (m.closing_stock !== null && m.closing_stock !== undefined) ? parseFloat(m.closing_stock) : null,
         combined: m.combined || '',
         blr: m.blr || null,
         chn: m.chn || null,
@@ -1143,6 +1158,7 @@ async function _fetchAll(table) {
         pun: m.pun || null,
         ncr: m.ncr || null,
         consumption_month: parseFloat(c.vm_consumption) || 0,
+        str_reorder_type: m.str_reorder_type||null,
         cnsump_value: parseFloat(vm.cnsump_value) || 0,
         regions: {
           BLR: { vendor: m.blr_vendor_1||null, vendor_alt: m.blr_vendor_2||null, lead_time: null,              str_reorder: m.str_reorder_type||null,  ordering_frequency: null,                       consumption_3mo: parseFloat(c.blr_3)||0 },
