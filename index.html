@@ -896,25 +896,37 @@
       <button class="rdash-subtab" data-rtab="items">Line Items</button>
     </div>
 
-    <!-- Panel: Overview (charts) -->
+    <!-- Panel: Overview (comprehensive table) -->
     <div class="rdash-panel active" id="rpanel-overview">
-      <div class="rdash-pivot">
-        <div class="rdash-pivot-card wide">
-          <div class="rdash-pivot-head"><div class="rdash-pivot-title">Top 10 Materials by Monthly Consumption</div></div>
-          <div class="rdash-pivot-body tall"><canvas id="rdash-chart-top10"></canvas></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="font-size:15px;font-weight:600;color:var(--navy);margin-bottom:2px">All Materials Overview</h3>
+          <div style="font-size:12px;color:var(--text-3)" id="overview-count">— items</div>
         </div>
-        <div class="rdash-pivot-card">
-          <div class="rdash-pivot-head"><div class="rdash-pivot-title">Materials by Category</div></div>
-          <div class="rdash-pivot-body"><canvas id="rdash-chart-category"></canvas></div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="overview-search" placeholder="Filter by SKU or description..." style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font:inherit;font-size:13px;width:280px;outline:none;background:var(--bg);color:var(--text)" onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'">
+          <button class="btn" id="overview-export">⬇ Export CSV</button>
         </div>
-        <div class="rdash-pivot-card">
-          <div class="rdash-pivot-head"><div class="rdash-pivot-title">Reorder Type Distribution</div></div>
-          <div class="rdash-pivot-body"><canvas id="rdash-chart-reorder"></canvas></div>
-        </div>
-        <div class="rdash-pivot-card">
-          <div class="rdash-pivot-head"><div class="rdash-pivot-title">Priority Breakdown</div></div>
-          <div class="rdash-pivot-body"><canvas id="rdash-chart-priority"></canvas></div>
-        </div>
+      </div>
+      <div class="data-card" style="overflow-x:auto;max-height:70vh;overflow-y:auto">
+        <table class="pivot-table" id="overview-table" style="font-size:12.5px">
+          <thead style="position:sticky;top:0;z-index:5"><tr>
+            <th style="width:100px">SKU</th>
+            <th>Description</th>
+            <th style="width:70px">UOM</th>
+            <th style="width:130px">Category</th>
+            <th style="width:110px">Cities</th>
+            <th style="width:90px">Priority</th>
+            <th class="num" style="width:80px">Stock</th>
+            <th class="num" style="width:90px">Cons/Month</th>
+            <th style="width:120px">Reorder Type</th>
+            <th class="num" style="width:80px">Min Qty</th>
+            <th class="num" style="width:80px">Max Qty</th>
+            <th class="num" style="width:70px">Lead Time</th>
+          </tr></thead>
+          <tbody id="overview-tbody"></tbody>
+        </table>
+        <div id="overview-empty" class="empty-state" style="display:none">No materials match the filter.</div>
       </div>
     </div>
 
@@ -1759,42 +1771,12 @@ function renderRegionDashboard(regionKey){
   // ── Destroy old charts ──
   _destroyRdashCharts();
 
-  // Chart 1: Top 10 by consumption
-  const top10 = [...rows].sort((a,b)=>(b.consumption_month||0)-(a.consumption_month||0)).slice(0,10);
-  _rdashChart('rdash-chart-top10','bar',
-    top10.map(r=>r.sku),
-    top10.map(r=>r.consumption_month||0),
-    top10.map((_,i)=>i===0?'#F57224':'#1B3560'),
-    true
-  );
-
-  // Chart 2: By major category
-  const catMap={};
-  rows.forEach(r=>{const k=r.major_category||'Other';catMap[k]=(catMap[k]||0)+1});
-  const catEntries=Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
-  _rdashChart('rdash-chart-category','doughnut',catEntries.map(e=>e[0]),catEntries.map(e=>e[1]),null,false);
-
-  // Chart 3: Reorder type
-  const reorderMap={};
-  rows.forEach(r=>{
-    const k=r.regions?.[reg.key]?.str_reorder||r.str_reorder_type||'Blank';
-    reorderMap[k]=(reorderMap[k]||0)+1;
-  });
-  const reorderEntries=Object.entries(reorderMap).sort((a,b)=>b[1]-a[1]);
-  _rdashChart('rdash-chart-reorder','doughnut',reorderEntries.map(e=>e[0]),reorderEntries.map(e=>e[1]),null,false);
-
-  // Chart 4: Priority
-  const critMap={'V.High':0,'High':0,'Med':0,'Low':0};
-  rows.forEach(r=>{if(critMap[r.criticality]!==undefined)critMap[r.criticality]++;});
-  _rdashChart('rdash-chart-priority','bar',
-    ['Very High','High','Medium','Low'],
-    [critMap['V.High'],critMap['High'],critMap['Med'],critMap['Low']],
-    ['#B91C1C','#F57224','#B45309','#15803D'],
-    false
-  );
+  // (Charts removed — replaced by Overview Table)
+  // Chart elements no longer exist in DOM since Overview tab now shows a comprehensive table.
 
   // ── Line Items ──
-  document.getElementById('rdash-items-label').textContent = rows.length + ' Line Items — ' + reg.name;
+  const itemsLabel = document.getElementById('rdash-items-label');
+  if (itemsLabel) itemsLabel.textContent = rows.length + ' Line Items — ' + reg.name;
   const tbody = document.getElementById('rdash-tbody');
 
   if(rows.length===0){
@@ -2166,6 +2148,120 @@ renderRegionDashboard = function(regionKey){
   // Start auto-refresh after initial load (every 30 seconds)
   setInterval(silentRefresh, 30000);
 })();
+
+
+
+/* ══ REGION OVERVIEW TABLE ════════════════════════════════════════ */
+let _overviewRows = []; // Current rows for the region
+let _overviewFilter = '';
+
+function _renderOverviewTable(rows, regionKey) {
+  _overviewRows = rows;
+  _overviewFilter = '';
+  const searchEl = document.getElementById('overview-search');
+  if (searchEl) searchEl.value = '';
+  _redrawOverviewTable(regionKey);
+}
+
+function _redrawOverviewTable(regionKey) {
+  const q = _overviewFilter.toLowerCase();
+  const filtered = q ? _overviewRows.filter(r => 
+    r.sku.toLowerCase().includes(q) || (r.description||'').toLowerCase().includes(q)
+  ) : _overviewRows;
+
+  document.getElementById('overview-count').textContent = filtered.length + ' items' + (q ? ' (filtered from ' + _overviewRows.length + ')' : '');
+  
+  const tbody = document.getElementById('overview-tbody');
+  const empty = document.getElementById('overview-empty');
+  
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = filtered.map(r => {
+    const info = r.regions?.[regionKey] || {};
+    const reorderVal = info.str_reorder || r.str_reorder_type;
+    const cities = REGIONS.map(c => {
+      const v = r[c.flag];
+      if (v === 'Discontinued') return '<span class="city discon">' + c.label + '</span>';
+      if (v) return '<span class="city on">' + c.label + '</span>';
+      return '<span class="city">' + c.label + '</span>';
+    }).join('');
+    
+    return '<tr>' +
+      '<td class="sku" style="font-family:var(--mono);color:var(--navy);font-weight:600">' + r.sku + '</td>' +
+      '<td>' + r.description + '</td>' +
+      '<td>' + (r.uom||'—') + '</td>' +
+      '<td style="font-size:11.5px">' + (r.major_category||'') + (r.category ? ' / ' + r.category : '') + '</td>' +
+      '<td><div class="cities" style="display:flex;gap:2px">' + cities + '</div></td>' +
+      '<td>' + critPill(r.criticality) + '</td>' +
+      '<td class="num' + (r.closing_stock==null?' muted':'') + '">' + fmtNum(r.closing_stock) + '</td>' +
+      '<td class="num">' + fmtConsumption(r.consumption_month) + '</td>' +
+      '<td>' + reorderPill(reorderVal) + '</td>' +
+      '<td class="num">' + fmtNum(r.min_qty) + '</td>' +
+      '<td class="num">' + fmtNum(r.max_qty) + '</td>' +
+      '<td class="num">' + (info.lead_time!=null?info.lead_time+'d':'—') + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+// Search input handler
+document.body.addEventListener('input', function(e) {
+  if (e.target.id === 'overview-search') {
+    _overviewFilter = e.target.value.trim();
+    // Get current region from state
+    if (state.region && !['all','multi','single'].includes(state.region)) {
+      _redrawOverviewTable(state.region);
+    }
+  }
+});
+
+// Export handler
+document.body.addEventListener('click', function(e) {
+  if (e.target.id === 'overview-export' || e.target.closest('#overview-export')) {
+    const regionKey = state.region;
+    if (!regionKey) return;
+    const reg = REGIONS.find(r => r.key === regionKey);
+    const q = _overviewFilter.toLowerCase();
+    const filtered = q ? _overviewRows.filter(r => 
+      r.sku.toLowerCase().includes(q) || (r.description||'').toLowerCase().includes(q)
+    ) : _overviewRows;
+    
+    const headers = ['SKU','Description','UOM','Major Category','Sub Category','Cities','Priority','Stock','Cons/Month','Reorder Type','Min Qty','Max Qty','Lead Time'];
+    const rows = filtered.map(r => {
+      const info = r.regions?.[regionKey] || {};
+      const reorderVal = info.str_reorder || r.str_reorder_type;
+      const cityList = [r.blr?'BLR':'',r.chn?'CHN':'',r.hyd?'HYD':'',r.pun?'PUN':'',r.ncr?'NCR':''].filter(Boolean).join('/');
+      return [r.sku,r.description,r.uom||'',r.major_category||'',r.category||'',cityList,r.criticality||'',r.closing_stock||0,r.consumption_month||0,reorderVal||'',r.min_qty||0,r.max_qty||0,info.lead_time||''];
+    });
+    const csv = [headers, ...rows].map(row => 
+      row.map(v => '"' + String(v||'').replace(/"/g,'""') + '"').join(',')
+    ).join('\n');
+    
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'printo_' + (reg ? reg.name.toLowerCase().replace(/\s/g,'_') : 'region') + '_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+  }
+});
+
+// Hook into renderRegionDashboard to populate overview table
+const _origRenderRegion2 = renderRegionDashboard;
+renderRegionDashboard = function(regionKey) {
+  _origRenderRegion2(regionKey);
+  
+  const reg = REGIONS.find(r => r.key === regionKey);
+  if (!reg) return;
+  const rows = DATA.filter(r => {
+    if (state.status === 'Active' && (isDiscontinued(r) || !r.str_reorder_type || String(r.str_reorder_type).trim() === '')) return false;
+    return r[reg.flag] && r[reg.flag] !== 'Discontinued';
+  });
+  _renderOverviewTable(rows, regionKey);
+};
+
 
 </script>
 </body>
