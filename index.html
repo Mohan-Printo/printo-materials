@@ -1035,10 +1035,17 @@ function applyFilters(){
     }
     if(state.status&&state.status!=="all"){
       const _rv=r.str_reorder_type;
-      const _hasR=_rv&&String(_rv).trim()!==""&&String(_rv).trim()!=="null";
-      if(state.status==="Active"&&(isDiscontinued(r)||!_hasR))return false;
-      if(state.status==="Discontinued"&&!isDiscontinued(r))return false;
-      if(state.status==="Blank"&&_hasR)return false;
+      const _rvStr = _rv ? String(_rv).trim() : '';
+      const _hasR = _rvStr !== "" && _rvStr !== "null";
+      const _isDiscReorder = _rvStr.toLowerCase().includes("discontinu");
+      const _searchActive = state.search && state.search.length > 0;
+      
+      // When user is actively searching, show all matches regardless of status
+      if (!_searchActive) {
+        if(state.status==="Active"&&(isDiscontinued(r)||!_hasR||_isDiscReorder))return false;
+        if(state.status==="Discontinued"&&!isDiscontinued(r)&&!_isDiscReorder)return false;
+        if(state.status==="Blank"&&_hasR)return false;
+      }
     }
     return true;
   });
@@ -2129,6 +2136,13 @@ renderRegionDashboard = function(regionKey){
         };
       });
       
+      // Remember which rows are expanded before re-rendering
+      const expandedSkus = [];
+      document.querySelectorAll('tr.expanded').forEach(mainRow => {
+        const skuCell = mainRow.querySelector('.sku');
+        if (skuCell) expandedSkus.push(skuCell.textContent.trim());
+      });
+
       // Re-render the current view silently
       if (state.view === 'analytics') {
         renderAnalytics();
@@ -2136,6 +2150,22 @@ renderRegionDashboard = function(regionKey){
         renderRegionDashboard(state.region);
       } else {
         renderTable();
+      }
+
+      // Re-expand the rows that were open before
+      if (expandedSkus.length > 0) {
+        setTimeout(() => {
+          expandedSkus.forEach(sku => {
+            const allRows = document.querySelectorAll('tr[data-idx]');
+            for (const row of allRows) {
+              const skuCell = row.querySelector('.sku');
+              if (skuCell && skuCell.textContent.trim() === sku) {
+                row.click();
+                break;
+              }
+            }
+          });
+        }, 100);
       }
       
     } catch(err) {
