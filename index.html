@@ -560,6 +560,144 @@
   .rpill.discontinued{background:#F1F5F9;color:#475569;border-color:#CBD5E1}
   .rpill.other{background:#F3F4F6;color:#374151;border-color:#E5E7EB}
 
+
+  /* Region Dashboard */
+  .region-view{display:none}
+  .region-view.active{display:block}
+  .table-view.hidden{display:none}
+
+  .rdash-header{
+    background:var(--navy);border-radius:10px;
+    padding:24px 28px;margin-bottom:20px;
+    display:flex;align-items:center;gap:24px;flex-wrap:wrap;
+    border-left:6px solid var(--orange);
+    box-shadow:var(--shadow-md);
+  }
+  .rdash-back{
+    background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.25);
+    color:#fff;padding:8px 14px;border-radius:var(--radius);
+    font:inherit;font-size:13px;font-weight:500;cursor:pointer;
+    display:flex;align-items:center;gap:6px;transition:background .15s;
+  }
+  .rdash-back:hover{background:rgba(255,255,255,.25)}
+  .rdash-title{font-size:26px;font-weight:700;color:#fff;letter-spacing:-.02em}
+  .rdash-subtitle{font-size:13px;color:rgba(255,255,255,.6);margin-top:2px}
+  .rdash-stats{display:flex;gap:32px;margin-left:auto;flex-wrap:wrap}
+  .rdash-stat-label{font-size:11px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:3px}
+  .rdash-stat-val{font-size:22px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+  .rdash-stat-val em{color:#FFB373;font-style:normal}
+
+  .rdash-pivot{
+    display:grid;grid-template-columns:repeat(3,1fr);
+    gap:14px;margin-bottom:20px;
+  }
+  .rdash-pivot-card{
+    background:var(--bg);border:1.5px solid var(--border);
+    border-radius:8px;overflow:hidden;box-shadow:var(--shadow-sm);
+  }
+  .rdash-pivot-card.wide{grid-column:span 2}
+  .rdash-pivot-head{
+    padding:12px 16px;border-bottom:1px solid var(--border);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .rdash-pivot-title{font-size:14px;font-weight:600;color:var(--navy)}
+  .rdash-pivot-body{padding:14px;min-height:200px;position:relative}
+  .rdash-pivot-body.tall{min-height:260px}
+
+  .rdash-divider{
+    display:flex;align-items:center;gap:12px;margin:24px 0 16px;
+  }
+  .rdash-divider-line{flex:1;height:1px;background:var(--border)}
+  .rdash-divider-label{
+    font-size:12px;font-weight:700;color:var(--text-3);
+    text-transform:uppercase;letter-spacing:.08em;
+    background:var(--surface);padding:4px 12px;
+    border:1px solid var(--border);border-radius:20px;
+    white-space:nowrap;
+  }
+
+  .rdash-summary-grid{
+    display:grid;grid-template-columns:repeat(4,1fr);
+    gap:12px;margin-bottom:20px;
+  }
+
+  @media(max-width:1100px){
+    .rdash-pivot{grid-template-columns:1fr}
+    .rdash-pivot-card.wide{grid-column:span 1}
+    .rdash-summary-grid{grid-template-columns:repeat(2,1fr)}
+    .rdash-stats{margin-left:0}
+  }
+
+
+  /* Region sub-tabs */
+  .rdash-subtabs{
+    display:flex;gap:2px;border-bottom:1.5px solid var(--border);
+    margin-bottom:18px;padding:0 4px;overflow-x:auto;
+  }
+  .rdash-subtab{
+    padding:10px 16px;font-size:13px;font-weight:500;color:var(--text-3);
+    cursor:pointer;border:0;background:transparent;border-bottom:2.5px solid transparent;
+    transition:color .12s,border-color .12s;white-space:nowrap;margin-bottom:-1.5px;
+  }
+  .rdash-subtab:hover{color:var(--text-2)}
+  .rdash-subtab.active{color:var(--navy);border-bottom-color:var(--orange);font-weight:600}
+  .rdash-subtab .badge{
+    display:inline-block;background:var(--surface-2);color:var(--text-3);
+    font-size:10px;padding:1px 7px;border-radius:10px;margin-left:6px;
+    font-weight:600;font-family:var(--mono);
+  }
+  .rdash-subtab.active .badge{background:var(--orange-soft);color:var(--orange-hover)}
+  .rdash-subtab.alert .badge{background:var(--red-soft);color:var(--red)}
+
+  .rdash-panel{display:none}
+  .rdash-panel.active{display:block}
+
+  /* Pivot tables */
+  .pivot-table{
+    width:100%;border-collapse:collapse;font-size:13px;
+    background:var(--bg);border:1.5px solid var(--border);border-radius:8px;
+    overflow:hidden;
+  }
+  .pivot-table thead{background:var(--navy);color:#fff}
+  .pivot-table thead th{
+    padding:12px 14px;text-align:left;font-weight:600;font-size:12px;
+    text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;
+    border-bottom:0;
+  }
+  .pivot-table thead th.num{text-align:right}
+  .pivot-table tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+  .pivot-table tbody tr:last-child{border-bottom:0}
+  .pivot-table tbody tr:hover{background:#F7F9FC}
+  .pivot-table tbody tr.total-row{
+    background:var(--navy-soft);font-weight:700;
+    border-top:2px solid var(--navy);
+  }
+  .pivot-table tbody tr.total-row:hover{background:var(--navy-soft)}
+  .pivot-table tbody td{padding:11px 14px;font-size:13px;color:var(--text)}
+  .pivot-table tbody td.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+  .pivot-table tbody td.num.muted{color:var(--text-4)}
+  .pivot-table tbody td.label{font-weight:500;color:var(--text)}
+  .pivot-table tbody td.bar-cell{position:relative;min-width:140px}
+  .pivot-table .bar-bg{
+    position:absolute;left:14px;right:14px;top:50%;height:5px;transform:translateY(50%);
+    background:var(--surface-2);border-radius:3px;overflow:hidden;
+  }
+  .pivot-table .bar-fill{height:100%;background:var(--navy);border-radius:3px;transition:width .3s}
+  .pivot-table .bar-fill.orange{background:var(--orange)}
+  .pivot-table .bar-fill.red{background:var(--red)}
+  .pivot-table .bar-fill.green{background:var(--green)}
+  .pivot-table .bar-label{position:relative;z-index:1;font-family:var(--mono);font-size:11px;color:var(--text-3);padding-right:8px}
+
+  .alert-pill{
+    display:inline-flex;align-items:center;padding:3px 8px;
+    background:var(--red-soft);color:var(--red);
+    font-size:11px;font-weight:600;border-radius:4px;
+  }
+  .alert-pill.warn{background:var(--amber-soft);color:var(--amber)}
+  .alert-pill.ok{background:var(--green-soft);color:var(--green)}
+
+
+  .detail-item dt span{display:inline-block;padding:1px 5px;background:var(--orange-soft);color:var(--orange-hover);border-radius:3px;margin-left:4px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -626,12 +764,7 @@
     <div class="menu-heading">Select City</div>
     <div id="region-list"></div>
   </div>
-  <div class="menu-section">
-    <div class="menu-heading">Quick Filters</div>
-    <button class="menu-item" data-action="region" data-value="all"><span>All Cities</span><span class="count">EVERYWHERE</span></button>
-    <button class="menu-item" data-action="region" data-value="multi"><span>Multi-City Items</span><span class="count">3+ CITIES</span></button>
-    <button class="menu-item" data-action="region" data-value="single"><span>Single-City Only</span><span class="count">1 CITY</span></button>
-  </div>
+
 </div>
 
 <div class="menu" id="menu-criticality" data-menu-id="criticality">
@@ -738,6 +871,95 @@
   </div>
 </div>
 
+
+  <!-- REGION DASHBOARD VIEW -->
+  <div class="region-view" id="region-view">
+    <div class="rdash-header" id="rdash-header">
+      <button class="rdash-back" id="rdash-back">← All Materials</button>
+      <div>
+        <div class="rdash-title" id="rdash-title">Bangalore</div>
+        <div class="rdash-subtitle" id="rdash-subtitle">Regional Materials Dashboard</div>
+      </div>
+      <div class="rdash-stats" id="rdash-stats"></div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="rdash-summary-grid" id="rdash-kpis"></div>
+
+    <!-- Sub-tabs -->
+    <div class="rdash-subtabs">
+      <button class="rdash-subtab active" data-rtab="overview">Overview</button>
+      <button class="rdash-subtab" data-rtab="category">Category Summary</button>
+      <button class="rdash-subtab" data-rtab="reorder">Reorder Type</button>
+      <button class="rdash-subtab" data-rtab="priority">Priority Breakdown</button>
+      <button class="rdash-subtab alert" data-rtab="lowstock">Low Stock Alert<span class="badge" id="lowstock-badge">0</span></button>
+      <button class="rdash-subtab" data-rtab="items">Line Items</button>
+    </div>
+
+    <!-- Panel: Overview (charts) -->
+    <div class="rdash-panel active" id="rpanel-overview">
+      <div class="rdash-pivot">
+        <div class="rdash-pivot-card wide">
+          <div class="rdash-pivot-head"><div class="rdash-pivot-title">Top 10 Materials by Monthly Consumption</div></div>
+          <div class="rdash-pivot-body tall"><canvas id="rdash-chart-top10"></canvas></div>
+        </div>
+        <div class="rdash-pivot-card">
+          <div class="rdash-pivot-head"><div class="rdash-pivot-title">Materials by Category</div></div>
+          <div class="rdash-pivot-body"><canvas id="rdash-chart-category"></canvas></div>
+        </div>
+        <div class="rdash-pivot-card">
+          <div class="rdash-pivot-head"><div class="rdash-pivot-title">Reorder Type Distribution</div></div>
+          <div class="rdash-pivot-body"><canvas id="rdash-chart-reorder"></canvas></div>
+        </div>
+        <div class="rdash-pivot-card">
+          <div class="rdash-pivot-head"><div class="rdash-pivot-title">Priority Breakdown</div></div>
+          <div class="rdash-pivot-body"><canvas id="rdash-chart-priority"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel: Category Summary -->
+    <div class="rdash-panel" id="rpanel-category">
+      <table class="pivot-table" id="cat-summary-table"></table>
+    </div>
+
+    <!-- Panel: Reorder Type Summary -->
+    <div class="rdash-panel" id="rpanel-reorder">
+      <table class="pivot-table" id="reorder-summary-table"></table>
+    </div>
+
+    <!-- Panel: Priority Breakdown -->
+    <div class="rdash-panel" id="rpanel-priority">
+      <table class="pivot-table" id="priority-summary-table"></table>
+    </div>
+
+    <!-- Panel: Low Stock Alert -->
+    <div class="rdash-panel" id="rpanel-lowstock">
+      <table class="pivot-table" id="lowstock-table"></table>
+      <div id="lowstock-empty" class="empty-state" style="display:none">No low stock alerts — all materials are at safe levels.</div>
+    </div>
+
+    <!-- Panel: Line Items -->
+    <div class="rdash-panel" id="rpanel-items">
+      <div class="data-card">
+        <table>
+          <thead><tr>
+            <th style="width:110px">SKU</th>
+            <th>Description</th>
+            <th style="width:160px">Vendor</th>
+            <th class="num" style="width:90px">Lead Time</th>
+            <th style="width:140px">Reorder Type</th>
+            <th class="num" style="width:110px">3-Mo Cons.</th>
+            <th style="width:100px">Priority</th>
+            <th class="num" style="width:90px">Stock</th>
+          </tr></thead>
+          <tbody id="rdash-tbody"></tbody>
+        </table>
+        <div id="rdash-empty" class="empty-state" style="display:none">No materials found for this region.</div>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <script>
@@ -766,7 +988,7 @@ function populateMenus(){
     const subs=cats.map(c=>{const n=DATA.filter(r=>r.category===c).length;return`<button class="menu-item" data-action="category" data-value="${c}"><span>${c}</span><span class="count">${n}</span></button>`}).join("");
     el.innerHTML=all+subs;
   });
-  document.getElementById("region-list").innerHTML=REGIONS.map(r=>{const n=DATA.filter(d=>d[r.flag]&&d[r.flag]!=="Discontinued").length;return`<button class="menu-item" data-action="region" data-value="${r.key}"><span>${r.name}</span><span class="count">${r.key} · ${n}</span></button>`}).join("");
+  document.getElementById("region-list").innerHTML=REGIONS.map(r=>`<button class="menu-item" data-action="region" data-value="${r.key}"><span>${r.name}</span><span class="count">${r.key}</span></button>`).join("");
   document.getElementById("criticality-list").innerHTML=CRIT_ORDER.map(c=>{const n=DATA.filter(d=>d.criticality===c.key).length;return`<button class="menu-item" data-action="criticality" data-value="${c.key}"><span>${c.label}</span><span class="count">${c.note} · ${n}</span></button>`}).join("");
   const nA=DATA.filter(d=>!isDiscontinued(d)).length,nD=DATA.filter(d=>isDiscontinued(d)).length;
   const nB=DATA.filter(d=>!d.str_reorder_type).length;
@@ -813,7 +1035,7 @@ function applyFilters(){
 function renderHead(){
   const thead=document.getElementById("thead");
   if(isSpecificRegion()){
-    thead.innerHTML=`<tr><th style="width:110px">SKU</th><th>Description</th><th style="width:160px">Vendor</th><th class="num" style="width:90px">Lead Time</th><th style="width:140px">Reorder Type</th><th class="num" style="width:120px">3-Mo Cons.</th><th style="width:100px">Priority</th><th class="num" style="width:90px">Stock</th><th style="width:140px">Reorder Type</th></tr>`;
+    thead.innerHTML=`<tr><th style="width:110px">SKU</th><th>Description</th><th style="width:160px">Vendor</th><th class="num" style="width:90px">Lead Time</th><th style="width:140px">Reorder Type</th><th class="num" style="width:120px">3-Mo Cons.</th><th style="width:100px">Priority</th><th class="num" style="width:90px">Stock</th></tr>`;
   }else{
     thead.innerHTML=`<tr><th style="width:110px">SKU</th><th>Description</th><th style="width:170px">Category</th><th style="width:130px">Cities</th><th style="width:100px">Priority</th><th class="num" style="width:90px">Stock</th><th class="num" style="width:130px">Cons. / Month</th><th style="width:140px">Reorder Type</th></tr>`;
   }
@@ -859,11 +1081,22 @@ function rowHTML(r,idx){
       <div class="detail-item"><dt>Sub-Category</dt><dd>${r.category_desc}</dd></div>
       <div class="detail-item"><dt>UOM</dt><dd>${r.uom||"—"}</dd></div>
       <div class="detail-item"><dt>Supplier MOQ</dt><dd>${r.supplier_moq!=null?r.supplier_moq.toLocaleString("en-IN")+" "+(r.uom||""):"—"}</dd></div>
+      <div class="detail-item"><dt>Min Distrbn Qty</dt><dd>${r.min_distrbn_qty!=null?r.min_distrbn_qty.toLocaleString("en-IN")+" "+(r.uom||""):"—"}</dd></div>
+      <div class="detail-item"><dt>BLR HUB Capacity</dt><dd>${r.blr_hub_capacity!=null?r.blr_hub_capacity.toLocaleString("en-IN"):"—"}</dd></div>
       <div class="detail-item"><dt>Unit Price</dt><dd>${fmtPrice(r.unit_price)}</dd></div>
       <div class="detail-item"><dt>Closing Stock</dt><dd>${fmtNum(r.closing_stock)} ${r.uom||""}</dd></div>
-      <div class="detail-item"><dt>Consumption / Month</dt><dd>${fmtConsumption(r.consumption_month)} ${r.uom||""}</dd></div>
-      <div class="detail-item"><dt>Consumption Value</dt><dd>${fmtPrice(r.cnsump_value)}</dd></div>
       <div class="detail-item"><dt>Category Manager</dt><dd>${r.cat_manager||"—"}</dd></div>
+    </dl></div>
+    <div class="detail-section"><h5>Calculated Values (auto-updated)</h5>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Consumption / Month</dt><dd>${fmtConsumption(r.consumption_month)} ${r.uom||""}</dd></div>
+      <div class="detail-item"><dt>Consumption Value <span style="color:var(--orange);font-size:10px">calc</span></dt><dd>${fmtPrice(r.cnsump_value)} <span style="font-size:11px;color:var(--text-4)">(Cons × Unit Price)</span></dd></div>
+      <div class="detail-item"><dt>Buffer for Lead Time <span style="color:var(--orange);font-size:10px">calc</span></dt><dd>${fmtNum(r.buffer_lead_time)} <span style="font-size:11px;color:var(--text-4)">(Cons × Lead ÷ 30)</span></dd></div>
+      <div class="detail-item"><dt>Min Qty</dt><dd>${fmtNum(r.min_qty)} ${r.uom||""}</dd></div>
+      <div class="detail-item"><dt>Max Qty</dt><dd>${fmtNum(r.max_qty)} ${r.uom||""}</dd></div>
+      <div class="detail-item"><dt>Min Value <span style="color:var(--orange);font-size:10px">calc</span></dt><dd>${fmtPrice(r.min_val)} <span style="font-size:11px;color:var(--text-4)">(Min × Unit Price)</span></dd></div>
+      <div class="detail-item"><dt>Max Value <span style="color:var(--orange);font-size:10px">calc</span></dt><dd>${fmtPrice(r.max_val)} <span style="font-size:11px;color:var(--text-4)">(Max × Unit Price)</span></dd></div>
+      <div class="detail-item"><dt>Ord Frequency</dt><dd>${r._ord_freq||30} days</dd></div>
     </dl></div>
     <div class="detail-section"><h5>Regional Breakdown</h5>${regionMatrixHTML(r)}</div>`;
   return`<tr data-idx="${idx}">${cells}</tr><tr class="detail-row" data-idx-detail="${idx}" style="display:none"><td colspan="9">${detailHTML}</td></tr>`;
@@ -971,7 +1204,11 @@ document.body.addEventListener("click",(e)=>{
     const action=item.dataset.action,value=item.dataset.value;
     if(action==="major"){state.major=value;state.category=null}
     else if(action==="category"){state.category=value;const r=DATA.find(d=>d.category===value);if(r)state.major=r.major_category}
-    else if(action==="region")state.region=value;
+    else if(action==="region"){
+      closeAllMenus();
+      showRegionDashboard(value);
+      return;
+    }
     else if(action==="criticality")state.criticality=value;
     else if(action==="status"){
       state.status=value;
@@ -1137,11 +1374,26 @@ async function _fetchAll(table) {
     DATA = mats.map(m => {
       const vm = vmMap[m.sku] || {};
       const c  = cMap[m.sku]  || {};
+
+      // Live formula calculations
+      const consumptionPerMonth = parseFloat(vm.consumption_per_month) || parseFloat(c.vm_consumption) || 0;
+      const unitPrice = parseFloat(m.unit_price) || parseFloat(vm.avg_unit_price) || 0;
+      const leadTime = parseFloat(m.lead_time) || parseFloat(vm.lead_time) || 0;
+      const minQty = parseFloat(vm.min_qty) || 0;
+      const maxQty = parseFloat(vm.max_qty) || 0;
+
+      // AUTO-CALCULATED formulas (live, derived from inputs above)
+      const calcCnsumpValue = consumptionPerMonth * unitPrice;
+      const calcBufferLeadTime = leadTime > 0 ? (consumptionPerMonth * leadTime) / 30 : 0;
+      const calcMinVal = minQty * unitPrice;
+      const calcMaxVal = maxQty * unitPrice;
+
       return {
         sku: m.sku || '',
         description: m.material_description || '',
         uom: m.uom || '',
         supplier_moq: m.supplier_moq,
+        min_distrbn_qty: m.min_distrbn_qty,
         criticality: m.criticality || '',
         classification: m.classification || '',
         type: m.type || '',
@@ -1149,7 +1401,8 @@ async function _fetchAll(table) {
         category: m.category || '',
         major_category: m.major_category || '',
         cat_manager: m.cat_mgr || '',
-        unit_price: parseFloat(vm.avg_unit_price) || null,
+        blr_hub_capacity: m.blr_hub_capacity,
+        unit_price: unitPrice || null,
         closing_stock: (m.closing_stock !== null && m.closing_stock !== undefined) ? parseFloat(m.closing_stock) : null,
         combined: m.combined || '',
         blr: m.blr || null,
@@ -1157,13 +1410,29 @@ async function _fetchAll(table) {
         hyd: m.hyd || null,
         pun: m.pun || null,
         ncr: m.ncr || null,
-        consumption_month: parseFloat(c.vm_consumption) || 0,
-        str_reorder_type: m.str_reorder_type||null,
-        cnsump_value: parseFloat(vm.cnsump_value) || 0,
+        str_reorder_type: m.str_reorder_type || null,
+        consumption_month: consumptionPerMonth,
+        // Calculated fields (live)
+        cnsump_value: calcCnsumpValue,
+        buffer_lead_time: calcBufferLeadTime,
+        min_qty: minQty,
+        max_qty: maxQty,
+        min_val: calcMinVal,
+        max_val: calcMaxVal,
+        // VM input fields
+        _vendor: vm.vendor || null,
+        _matrl_categorization: vm.matrl_categorization || null,
+        _helper: vm.helper || null,
+        _uncertainty_min: parseFloat(vm.uncertainty_min) || 0,
+        _uncertainty_max: parseFloat(vm.uncertainty_max) || 0,
+        _ord_freq: parseFloat(vm.ord_freq) || 30,
+        _lead_time: leadTime,
+        _min_qty: minQty,
+        _max_qty: maxQty,
         regions: {
-          BLR: { vendor: m.blr_vendor_1||null, vendor_alt: m.blr_vendor_2||null, lead_time: null,              str_reorder: m.str_reorder_type||null,  ordering_frequency: null,                       consumption_3mo: parseFloat(c.blr_3)||0 },
-          CHN: { vendor: m.chn_vendor_1||null, vendor_alt: null,                 lead_time: m.chn_lead_time||null, str_reorder: m.chn_str_reorder||null, ordering_frequency: m.chn_ordering_frequency||null, consumption_3mo: parseFloat(c.chn_3)||0 },
-          HYD: { vendor: m.hyd_vendor_1||null, vendor_alt: null,                 lead_time: m.hyd_lead_time||null, str_reorder: m.hyd_str_reorder||null, ordering_frequency: m.hyd_ordering_frequency||null, consumption_3mo: parseFloat(c.hyd_3)||0 },
+          BLR: { vendor: m.blr_vendor_1||null, vendor_alt: null, lead_time: parseFloat(m.lead_time)||null, str_reorder: m.str_reorder_type||null, ordering_frequency: null, consumption_3mo: parseFloat(c.blr_3)||0, hub_capacity: m.blr_hub_capacity||null },
+          CHN: { vendor: m.chn_vendor_1||null, vendor_alt: m.chn_vendor_2||null, lead_time: m.chn_lead_time||null, str_reorder: m.chn_str_reorder||null, ordering_frequency: m.chn_ordering_frequency||null, consumption_3mo: parseFloat(c.chn_3)||0 },
+          HYD: { vendor: m.hyd_vendor_1||null, vendor_alt: m.hyd_vendor_2||null, lead_time: m.hyd_lead_time||null, str_reorder: m.hyd_str_reorder||null, ordering_frequency: m.hyd_ordering_frequency||null, consumption_3mo: parseFloat(c.hyd_3)||0 },
           NCR: { vendor: m.ncr_vendor_1||null, vendor_alt: m.ncr_vendor_2||null, lead_time: m.ncr_lead_time||null, str_reorder: m.ncr_str_reorder||null, ordering_frequency: m.ncr_ordering_frequency||null, consumption_3mo: parseFloat(c.ncr_3)||0 },
           PUN: { vendor: null, vendor_alt: null, lead_time: null, str_reorder: null, ordering_frequency: null, consumption_3mo: parseFloat(c.pun_3)||0 }
         },
@@ -1402,6 +1671,501 @@ function reorderPill(val){
   else if(v.includes('discontinu')){cls='discontinued';label='Discontinued'}
   return `<span class="rpill ${cls}">${label}</span>`;
 }
+
+
+/* ══ REGION DASHBOARD ══════════════════════════════════════════ */
+let _rdashCharts = {};
+
+function _destroyRdashCharts(){
+  Object.values(_rdashCharts).forEach(c=>{try{c.destroy()}catch(e){}});
+  _rdashCharts = {};
+}
+
+function _rdashChart(id, type, labels, values, colors, horizontal){
+  const ctx = document.getElementById(id);
+  if(!ctx) return;
+  const isPie = type==='doughnut'||type==='pie';
+  _rdashCharts[id] = new Chart(ctx, {
+    type: type,
+    data: {
+      labels,
+      datasets:[{
+        data: values,
+        backgroundColor: colors || ['#1B3560','#F57224','#2A4F87','#1D4ED8','#15803D','#7C3AED','#B45309','#B91C1C','#FF8C45','#6B7280'],
+        borderColor: isPie?'#fff':'#1B3560',
+        borderWidth: isPie?2:0,
+        borderRadius: isPie?0:4
+      }]
+    },
+    options:{
+      indexAxis: horizontal?'y':'x',
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:isPie,position:'right',labels:{font:{family:'Inter',size:11},boxWidth:10,padding:8}},
+        tooltip:{
+          backgroundColor:'#111827',titleColor:'#fff',bodyColor:'#F9FAFB',
+          titleFont:{family:'Inter',weight:'600',size:12},
+          bodyFont:{family:'JetBrains Mono',size:11},
+          padding:8,cornerRadius:6,displayColors:false
+        }
+      },
+      scales: isPie?{}:{
+        x:{ticks:{font:{family:'JetBrains Mono',size:10},color:'#6B7280'},grid:{color:'#EEF0F4'}},
+        y:{ticks:{font:{family:'JetBrains Mono',size:10},color:'#6B7280'},grid:{color:'#EEF0F4'}}
+      }
+    }
+  });
+}
+
+function renderRegionDashboard(regionKey){
+  const reg = REGIONS.find(r=>r.key===regionKey);
+  if(!reg) return;
+
+  // Filter materials for this region
+  const rows = DATA.filter(r=>{
+    if(state.status==='Active' && (isDiscontinued(r)||!r.str_reorder_type||String(r.str_reorder_type).trim()==='')) return false;
+    return r[reg.flag] && r[reg.flag]!=='Discontinued';
+  });
+
+  // ── Header ──
+  document.getElementById('rdash-title').textContent = reg.name;
+  document.getElementById('rdash-subtitle').textContent = 'Regional Materials Dashboard — ' + rows.length + ' active SKUs';
+
+  // Stats in header
+  const totalConsumption = rows.reduce((s,r)=>s+(parseFloat(r.regions?.[reg.key]?.consumption_3mo)||0),0);
+  const vendors = new Set(rows.map(r=>r.regions?.[reg.key]?.vendor).filter(v=>v&&v!=='CS'&&v!=='Common'));
+  const stockVal = rows.reduce((s,r)=>s+((r.closing_stock||0)*(r.unit_price||0)),0);
+  document.getElementById('rdash-stats').innerHTML = `
+    <div><div class="rdash-stat-label">Total SKUs</div><div class="rdash-stat-val"><em>${rows.length}</em></div></div>
+    <div><div class="rdash-stat-label">Vendors</div><div class="rdash-stat-val">${vendors.size}</div></div>
+    <div><div class="rdash-stat-label">3-Mo Consumption</div><div class="rdash-stat-val">${fmtConsumption(totalConsumption)}</div></div>
+    <div><div class="rdash-stat-label">Stock Value</div><div class="rdash-stat-val">${fmtPrice(stockVal)}</div></div>
+  `;
+
+  // ── KPI Cards ──
+  const active = rows.filter(r=>!isDiscontinued(r)).length;
+  const avgLeadTimes = rows.map(r=>r.regions?.[reg.key]?.lead_time).filter(x=>x!=null);
+  const avgLead = avgLeadTimes.length ? Math.round(avgLeadTimes.reduce((a,b)=>a+b,0)/avgLeadTimes.length) : null;
+  const vhigh = rows.filter(r=>r.criticality==='V.High').length;
+  const high = rows.filter(r=>r.criticality==='High').length;
+
+  document.getElementById('rdash-kpis').innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">Total SKUs</div><div class="kpi-value">${rows.length}</div><div class="kpi-sub">stocked in ${reg.name}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Stock Value</div><div class="kpi-value">${fmtPrice(stockVal)}</div><div class="kpi-sub">closing inventory</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Very High + High Priority</div><div class="kpi-value">${vhigh+high}<span class="small"> SKUs</span></div><div class="kpi-sub">${vhigh} V.High · ${high} High</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Avg Lead Time</div><div class="kpi-value">${avgLead!=null?avgLead:'—'}<span class="small">${avgLead!=null?' days':''}</span></div><div class="kpi-sub">for ${reg.name}</div></div>
+  `;
+
+  // ── Destroy old charts ──
+  _destroyRdashCharts();
+
+  // Chart 1: Top 10 by consumption
+  const top10 = [...rows].sort((a,b)=>(b.consumption_month||0)-(a.consumption_month||0)).slice(0,10);
+  _rdashChart('rdash-chart-top10','bar',
+    top10.map(r=>r.sku),
+    top10.map(r=>r.consumption_month||0),
+    top10.map((_,i)=>i===0?'#F57224':'#1B3560'),
+    true
+  );
+
+  // Chart 2: By major category
+  const catMap={};
+  rows.forEach(r=>{const k=r.major_category||'Other';catMap[k]=(catMap[k]||0)+1});
+  const catEntries=Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
+  _rdashChart('rdash-chart-category','doughnut',catEntries.map(e=>e[0]),catEntries.map(e=>e[1]),null,false);
+
+  // Chart 3: Reorder type
+  const reorderMap={};
+  rows.forEach(r=>{
+    const k=r.regions?.[reg.key]?.str_reorder||r.str_reorder_type||'Blank';
+    reorderMap[k]=(reorderMap[k]||0)+1;
+  });
+  const reorderEntries=Object.entries(reorderMap).sort((a,b)=>b[1]-a[1]);
+  _rdashChart('rdash-chart-reorder','doughnut',reorderEntries.map(e=>e[0]),reorderEntries.map(e=>e[1]),null,false);
+
+  // Chart 4: Priority
+  const critMap={'V.High':0,'High':0,'Med':0,'Low':0};
+  rows.forEach(r=>{if(critMap[r.criticality]!==undefined)critMap[r.criticality]++;});
+  _rdashChart('rdash-chart-priority','bar',
+    ['Very High','High','Medium','Low'],
+    [critMap['V.High'],critMap['High'],critMap['Med'],critMap['Low']],
+    ['#B91C1C','#F57224','#B45309','#15803D'],
+    false
+  );
+
+  // ── Line Items ──
+  document.getElementById('rdash-items-label').textContent = rows.length + ' Line Items — ' + reg.name;
+  const tbody = document.getElementById('rdash-tbody');
+
+  if(rows.length===0){
+    tbody.innerHTML='';
+    document.getElementById('rdash-empty').style.display='block';
+  } else {
+    document.getElementById('rdash-empty').style.display='none';
+    tbody.innerHTML = rows.map(r=>{
+      const info = r.regions?.[reg.key]||{};
+      const stockCls = r.closing_stock==null?'num muted':'num';
+      return `<tr>
+        <td class="sku">${r.sku}</td>
+        <td class="desc">${r.description}</td>
+        <td class="vendor-cell">${vendorCell(info.vendor,info.vendor_alt)}</td>
+        <td class="${info.lead_time==null?'num muted':'num'}">${info.lead_time!=null?info.lead_time+' <span class="unit">d</span>':'—'}</td>
+        <td>${reorderPill(info.str_reorder||r.str_reorder_type)}</td>
+        <td class="${info.consumption_3mo==null?'num muted':'num'}">${fmtConsumption(info.consumption_3mo)} ${info.consumption_3mo!=null&&r.uom?'<span class="unit">'+r.uom+'</span>':''}</td>
+        <td>${critPill(r.criticality)}</td>
+        <td class="${stockCls}">${fmtNum(r.closing_stock)}</td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+// ── Switch to region dashboard ──
+function showRegionDashboard(regionKey){
+  state.region = regionKey;
+  state.view = 'region';
+  document.getElementById('table-view').classList.add('hidden');
+  document.getElementById('analytics-view').classList.remove('active');
+  document.getElementById('region-view').classList.add('active');
+  syncTabs();
+  renderRegionDashboard(regionKey);
+}
+
+// ── Back button ──
+document.getElementById('rdash-back').addEventListener('click',()=>{
+  state.region = null;
+  state.view = 'table';
+  document.getElementById('region-view').classList.remove('active');
+  document.getElementById('table-view').classList.remove('hidden');
+  document.getElementById('analytics-view').classList.remove('active');
+  _destroyRdashCharts();
+  syncTabs();
+  renderTable();
+});
+
+
+/* ══ REGION PIVOT TABLES ═════════════════════════════════════════ */
+
+function _renderCategorySummary(rows){
+  const m = {};
+  rows.forEach(r=>{
+    const k = r.major_category||'Other';
+    if(!m[k]) m[k] = {count:0, stockVal:0, cons:0, stockQty:0};
+    m[k].count++;
+    m[k].stockVal += (r.closing_stock||0)*(r.unit_price||0);
+    m[k].cons += r.consumption_month||0;
+    m[k].stockQty += r.closing_stock||0;
+  });
+  const rows2 = Object.entries(m).sort((a,b)=>b[1].stockVal-a[1].stockVal);
+  const total = {count:0,stockVal:0,cons:0,stockQty:0};
+  rows2.forEach(([_,v])=>{total.count+=v.count;total.stockVal+=v.stockVal;total.cons+=v.cons;total.stockQty+=v.stockQty});
+  const maxVal = Math.max(...rows2.map(r=>r[1].stockVal), 1);
+
+  document.getElementById('cat-summary-table').innerHTML = `
+    <thead><tr>
+      <th>Category</th>
+      <th class="num">SKU Count</th>
+      <th class="num">Stock Qty</th>
+      <th class="num">Stock Value</th>
+      <th class="num">% of Value</th>
+      <th class="num">Monthly Consumption</th>
+    </tr></thead>
+    <tbody>
+      ${rows2.map(([k,v])=>`<tr>
+        <td class="label">${k}</td>
+        <td class="num">${v.count}</td>
+        <td class="num">${fmtNum(v.stockQty)}</td>
+        <td class="num">${fmtPrice(v.stockVal)}</td>
+        <td class="num">${total.stockVal>0?((v.stockVal/total.stockVal)*100).toFixed(1):0}%</td>
+        <td class="num">${fmtConsumption(v.cons)}</td>
+      </tr>`).join('')}
+      <tr class="total-row">
+        <td class="label">Total</td>
+        <td class="num">${total.count}</td>
+        <td class="num">${fmtNum(total.stockQty)}</td>
+        <td class="num">${fmtPrice(total.stockVal)}</td>
+        <td class="num">100%</td>
+        <td class="num">${fmtConsumption(total.cons)}</td>
+      </tr>
+    </tbody>`;
+}
+
+function _renderReorderSummary(rows, regionKey){
+  const m = {};
+  rows.forEach(r=>{
+    const k = r.regions?.[regionKey]?.str_reorder||r.str_reorder_type||'(Blank)';
+    if(!m[k]) m[k] = {count:0, stockVal:0, cons:0};
+    m[k].count++;
+    m[k].stockVal += (r.closing_stock||0)*(r.unit_price||0);
+    m[k].cons += r.consumption_month||0;
+  });
+  const rows2 = Object.entries(m).sort((a,b)=>b[1].count-a[1].count);
+  const total = {count:0,stockVal:0,cons:0};
+  rows2.forEach(([_,v])=>{total.count+=v.count;total.stockVal+=v.stockVal;total.cons+=v.cons});
+
+  document.getElementById('reorder-summary-table').innerHTML = `
+    <thead><tr>
+      <th>Reorder Type</th>
+      <th class="num">SKU Count</th>
+      <th class="num">% of Total</th>
+      <th class="num">Stock Value</th>
+      <th class="num">Monthly Consumption</th>
+    </tr></thead>
+    <tbody>
+      ${rows2.map(([k,v])=>`<tr>
+        <td class="label">${reorderPill(k)}</td>
+        <td class="num">${v.count}</td>
+        <td class="num">${total.count>0?((v.count/total.count)*100).toFixed(1):0}%</td>
+        <td class="num">${fmtPrice(v.stockVal)}</td>
+        <td class="num">${fmtConsumption(v.cons)}</td>
+      </tr>`).join('')}
+      <tr class="total-row">
+        <td class="label">Total</td>
+        <td class="num">${total.count}</td>
+        <td class="num">100%</td>
+        <td class="num">${fmtPrice(total.stockVal)}</td>
+        <td class="num">${fmtConsumption(total.cons)}</td>
+      </tr>
+    </tbody>`;
+}
+
+function _renderPrioritySummary(rows){
+  const order = [
+    {key:'V.High', label:'Very High', cls:'red'},
+    {key:'High', label:'High', cls:'orange'},
+    {key:'Med', label:'Medium', cls:''},
+    {key:'Low', label:'Low', cls:'green'}
+  ];
+  const m = {};
+  order.forEach(o=>m[o.key]={count:0,stockVal:0,cons:0,stockQty:0});
+  rows.forEach(r=>{
+    if(m[r.criticality]){
+      m[r.criticality].count++;
+      m[r.criticality].stockVal += (r.closing_stock||0)*(r.unit_price||0);
+      m[r.criticality].cons += r.consumption_month||0;
+      m[r.criticality].stockQty += r.closing_stock||0;
+    }
+  });
+  const total = {count:0,stockVal:0,cons:0,stockQty:0};
+  order.forEach(o=>{total.count+=m[o.key].count;total.stockVal+=m[o.key].stockVal;total.cons+=m[o.key].cons;total.stockQty+=m[o.key].stockQty});
+
+  document.getElementById('priority-summary-table').innerHTML = `
+    <thead><tr>
+      <th>Priority Level</th>
+      <th class="num">SKU Count</th>
+      <th class="num">% of Total</th>
+      <th class="num">Stock Qty</th>
+      <th class="num">Stock Value</th>
+      <th class="num">Monthly Consumption</th>
+    </tr></thead>
+    <tbody>
+      ${order.map(o=>`<tr>
+        <td class="label">${critPill(o.key)}</td>
+        <td class="num">${m[o.key].count}</td>
+        <td class="num">${total.count>0?((m[o.key].count/total.count)*100).toFixed(1):0}%</td>
+        <td class="num">${fmtNum(m[o.key].stockQty)}</td>
+        <td class="num">${fmtPrice(m[o.key].stockVal)}</td>
+        <td class="num">${fmtConsumption(m[o.key].cons)}</td>
+      </tr>`).join('')}
+      <tr class="total-row">
+        <td class="label">Total</td>
+        <td class="num">${total.count}</td>
+        <td class="num">100%</td>
+        <td class="num">${fmtNum(total.stockQty)}</td>
+        <td class="num">${fmtPrice(total.stockVal)}</td>
+        <td class="num">${fmtConsumption(total.cons)}</td>
+      </tr>
+    </tbody>`;
+}
+
+function _renderLowStockAlert(rows, regionKey){
+  // Build vm_params lookup from already-loaded data (need min/max)
+  // Items where closing_stock < min_qty are alerts
+  const alerts = [];
+  rows.forEach(r=>{
+    const stock = r.closing_stock;
+    const minQ = r._min_qty;
+    const maxQ = r._max_qty;
+    if(stock==null || minQ==null) return;
+    if(stock < minQ){
+      const severity = stock===0 ? 'critical' : (stock < minQ*0.5 ? 'warn' : 'low');
+      alerts.push({r, stock, minQ, maxQ, severity, gap:minQ-stock});
+    }
+  });
+  alerts.sort((a,b)=>{
+    const order = {critical:0,warn:1,low:2};
+    if(order[a.severity]!==order[b.severity]) return order[a.severity]-order[b.severity];
+    return b.gap-a.gap;
+  });
+
+  document.getElementById('lowstock-badge').textContent = alerts.length;
+
+  if(alerts.length===0){
+    document.getElementById('lowstock-table').innerHTML='';
+    document.getElementById('lowstock-empty').style.display='block';
+    return;
+  }
+  document.getElementById('lowstock-empty').style.display='none';
+
+  document.getElementById('lowstock-table').innerHTML = `
+    <thead><tr>
+      <th>SKU</th>
+      <th>Description</th>
+      <th>Status</th>
+      <th class="num">Current Stock</th>
+      <th class="num">Min Qty</th>
+      <th class="num">Max Qty</th>
+      <th class="num">Shortage</th>
+      <th>Priority</th>
+      <th>Reorder Type</th>
+    </tr></thead>
+    <tbody>
+      ${alerts.map(a=>{
+        const sevLabel = a.severity==='critical'?'OUT OF STOCK':a.severity==='warn'?'CRITICAL LOW':'BELOW MIN';
+        const sevCls = a.severity==='critical'?'':a.severity==='warn'?'warn':'';
+        return `<tr>
+          <td class="sku">${a.r.sku}</td>
+          <td class="desc">${a.r.description}</td>
+          <td><span class="alert-pill ${sevCls}">${sevLabel}</span></td>
+          <td class="num" style="color:${a.severity==='critical'?'#B91C1C':a.severity==='warn'?'#B45309':'#374151'};font-weight:700">${fmtNum(a.stock)}</td>
+          <td class="num">${fmtNum(a.minQ)}</td>
+          <td class="num muted">${fmtNum(a.maxQ)}</td>
+          <td class="num" style="color:#B91C1C;font-weight:600">${fmtNum(a.gap)}</td>
+          <td>${critPill(a.r.criticality)}</td>
+          <td>${reorderPill(a.r.regions?.[regionKey]?.str_reorder||a.r.str_reorder_type)}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>`;
+}
+
+// Subtab switching
+document.body.addEventListener('click', function(e){
+  const tab = e.target.closest('.rdash-subtab');
+  if(!tab) return;
+  document.querySelectorAll('.rdash-subtab').forEach(t=>t.classList.toggle('active', t===tab));
+  const target = tab.dataset.rtab;
+  document.querySelectorAll('.rdash-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('rpanel-'+target).classList.add('active');
+});
+
+// Hook into renderRegionDashboard to also render all pivot tables
+const _origRenderRegion = renderRegionDashboard;
+renderRegionDashboard = function(regionKey){
+  _origRenderRegion(regionKey);
+
+  // Get the same filtered rows
+  const reg = REGIONS.find(r=>r.key===regionKey);
+  const rows = DATA.filter(r=>{
+    if(state.status==='Active' && (isDiscontinued(r)||!r.str_reorder_type||String(r.str_reorder_type).trim()==='')) return false;
+    return r[reg.flag] && r[reg.flag]!=='Discontinued';
+  });
+
+  _renderCategorySummary(rows);
+  _renderReorderSummary(rows, regionKey);
+  _renderPrioritySummary(rows);
+  _renderLowStockAlert(rows, regionKey);
+
+  // Reset to overview tab on new region load
+  document.querySelectorAll('.rdash-subtab').forEach(t=>t.classList.toggle('active', t.dataset.rtab==='overview'));
+  document.querySelectorAll('.rdash-panel').forEach(p=>p.classList.toggle('active', p.id==='rpanel-overview'));
+};
+
+
+/* ══ AUTO-REFRESH every 30 seconds (silent) ══════════════════════ */
+(function() {
+  let _refreshInProgress = false;
+  
+  async function silentRefresh() {
+    if (_refreshInProgress) return;
+    _refreshInProgress = true;
+    
+    try {
+      // Fetch fresh data
+      const newMats = await _fetchAll('materials');
+      const newVms = await _fetchAll('RM Classification-VM');
+      const newCons = await _fetchAll('Cons-2025');
+      
+      // Rebuild maps
+      const vmMap = {};
+      newVms.forEach(r => vmMap[r.sku] = r);
+      const cMap = {};
+      newCons.forEach(r => cMap[r.sku] = r);
+      
+      // Rebuild DATA array with same formula logic
+      DATA = newMats.map(m => {
+        const vm = vmMap[m.sku] || {};
+        const c  = cMap[m.sku]  || {};
+        const consumptionPerMonth = parseFloat(vm.consumption_per_month) || parseFloat(c.vm_consumption) || 0;
+        const unitPrice = parseFloat(m.unit_price) || parseFloat(vm.avg_unit_price) || 0;
+        const leadTime = parseFloat(m.lead_time) || parseFloat(vm.lead_time) || 0;
+        const minQty = parseFloat(vm.min_qty) || 0;
+        const maxQty = parseFloat(vm.max_qty) || 0;
+        const calcCnsumpValue = consumptionPerMonth * unitPrice;
+        const calcBufferLeadTime = leadTime > 0 ? (consumptionPerMonth * leadTime) / 30 : 0;
+        const calcMinVal = minQty * unitPrice;
+        const calcMaxVal = maxQty * unitPrice;
+        
+        return {
+          sku: m.sku || '',
+          description: m.material_description || '',
+          uom: m.uom || '',
+          supplier_moq: m.supplier_moq,
+          min_distrbn_qty: m.min_distrbn_qty,
+          criticality: m.criticality || '',
+          classification: m.classification || '',
+          type: m.type || '',
+          category_desc: m.material_category_desc || '',
+          category: m.category || '',
+          major_category: m.major_category || '',
+          cat_manager: m.cat_mgr || '',
+          blr_hub_capacity: m.blr_hub_capacity,
+          unit_price: unitPrice || null,
+          closing_stock: (m.closing_stock !== null && m.closing_stock !== undefined) ? parseFloat(m.closing_stock) : null,
+          combined: m.combined || '',
+          blr: m.blr || null, chn: m.chn || null, hyd: m.hyd || null, pun: m.pun || null, ncr: m.ncr || null,
+          str_reorder_type: m.str_reorder_type || null,
+          consumption_month: consumptionPerMonth,
+          cnsump_value: calcCnsumpValue,
+          buffer_lead_time: calcBufferLeadTime,
+          min_qty: minQty, max_qty: maxQty,
+          min_val: calcMinVal, max_val: calcMaxVal,
+          _vendor: vm.vendor || null,
+          _matrl_categorization: vm.matrl_categorization || null,
+          _helper: vm.helper || null,
+          _uncertainty_min: parseFloat(vm.uncertainty_min) || 0,
+          _uncertainty_max: parseFloat(vm.uncertainty_max) || 0,
+          _ord_freq: parseFloat(vm.ord_freq) || 30,
+          _lead_time: leadTime,
+          _min_qty: minQty, _max_qty: maxQty,
+          regions: {
+            BLR: { vendor: m.blr_vendor_1||null, vendor_alt: null, lead_time: parseFloat(m.lead_time)||null, str_reorder: m.str_reorder_type||null, ordering_frequency: null, consumption_3mo: parseFloat(c.blr_3)||0, hub_capacity: m.blr_hub_capacity||null },
+            CHN: { vendor: m.chn_vendor_1||null, vendor_alt: m.chn_vendor_2||null, lead_time: m.chn_lead_time||null, str_reorder: m.chn_str_reorder||null, ordering_frequency: m.chn_ordering_frequency||null, consumption_3mo: parseFloat(c.chn_3)||0 },
+            HYD: { vendor: m.hyd_vendor_1||null, vendor_alt: m.hyd_vendor_2||null, lead_time: m.hyd_lead_time||null, str_reorder: m.hyd_str_reorder||null, ordering_frequency: m.hyd_ordering_frequency||null, consumption_3mo: parseFloat(c.hyd_3)||0 },
+            NCR: { vendor: m.ncr_vendor_1||null, vendor_alt: m.ncr_vendor_2||null, lead_time: m.ncr_lead_time||null, str_reorder: m.ncr_str_reorder||null, ordering_frequency: m.ncr_ordering_frequency||null, consumption_3mo: parseFloat(c.ncr_3)||0 },
+            PUN: { vendor: null, vendor_alt: null, lead_time: null, str_reorder: null, ordering_frequency: null, consumption_3mo: parseFloat(c.pun_3)||0 }
+          },
+          grand_total_consumption: parseFloat(c.grand_total) || 0
+        };
+      });
+      
+      // Re-render the current view silently
+      if (state.view === 'analytics') {
+        renderAnalytics();
+      } else if (state.view === 'region' && state.region) {
+        renderRegionDashboard(state.region);
+      } else {
+        renderTable();
+      }
+      
+    } catch(err) {
+      console.error('Auto-refresh failed:', err);
+    } finally {
+      _refreshInProgress = false;
+    }
+  }
+  
+  // Start auto-refresh after initial load (every 30 seconds)
+  setInterval(silentRefresh, 30000);
+})();
 
 </script>
 </body>
