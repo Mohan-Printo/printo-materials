@@ -1035,10 +1035,19 @@ function populateMenus(){
     <button class="menu-item" data-action="status" data-value="Discontinued"><span>Discontinued only</span><span class="count">${nD}</span></button>
     <button class="menu-item" data-action="status" data-value="Blank"><span>No reorder type (blank)</span><span class="count">${nB}</span></button>`;
   const allVals=DATA.flatMap(r=>[r.regions?.BLR?.str_reorder,r.regions?.CHN?.str_reorder,r.regions?.HYD?.str_reorder,r.regions?.NCR?.str_reorder,r.regions?.PUN?.str_reorder,r.str_reorder_type]).filter(Boolean);
-  const reorderTypes=[...new Set(allVals)].sort();
-  document.getElementById("reorder-list").innerHTML=reorderTypes.map(t=>{
-    const n=DATA.filter(d=>{const vals=[d.regions?.BLR?.str_reorder,d.regions?.CHN?.str_reorder,d.regions?.HYD?.str_reorder,d.regions?.NCR?.str_reorder,d.regions?.PUN?.str_reorder,d.str_reorder_type];return vals.some(v=>v===t);}).length;
-    return`<button class="menu-item" data-action="reorder" data-value="${t}"><span>${reorderPill(t)}</span><span class="count">${n}</span></button>`;
+  // Normalize for grouping: trim + collapse internal whitespace + unify case for EXACT duplicates.
+  // (Distinct phrases like "Will be discontinued later" stay separate — only true dupes merge.)
+  const _normReorder = v => String(v).trim().replace(/\s+/g,' ');
+  const _groups = {};  // normalizedLower -> { label, count }
+  allVals.forEach(v => {
+    const norm = _normReorder(v);
+    const key = norm.toLowerCase();
+    if (!_groups[key]) _groups[key] = { label: norm, count: 0 };
+    _groups[key].count++;
+  });
+  const reorderTypes = Object.values(_groups).sort((a,b)=>a.label.localeCompare(b.label));
+  document.getElementById("reorder-list").innerHTML=reorderTypes.map(g=>{
+    return`<button class="menu-item" data-action="reorder" data-value="${g.label.replace(/"/g,'&quot;')}"><span>${reorderPill(g.label)}</span><span class="count">${g.count}</span></button>`;
   }).join('');
 }
 
@@ -1056,7 +1065,9 @@ function applyFilters(){
     if(state.criticality&&r.criticality!==state.criticality)return false;
     if(state.reorder){
       const allReorders=[r.regions?.BLR?.str_reorder,r.regions?.CHN?.str_reorder,r.regions?.HYD?.str_reorder,r.regions?.NCR?.str_reorder,r.regions?.PUN?.str_reorder,r.str_reorder_type];
-      if(!allReorders.some(v=>v===state.reorder))return false;
+      const _nr = v => String(v).trim().replace(/\s+/g,' ').toLowerCase();
+      const _target = _nr(state.reorder);
+      if(!allReorders.filter(Boolean).some(v=>_nr(v)===_target))return false;
     }
     if(state.status&&state.status!=="all"){
       const _rv=r.str_reorder_type;
@@ -1136,6 +1147,7 @@ function rowHTML(r,idx){
       <div class="detail-item"><dt>Launch Start Date</dt><dd>${r.launch_start||"—"}</dd></div>
       <div class="detail-item"><dt>Launch End Date</dt><dd>${r.launch_end||"—"}</dd></div>
       <div class="detail-item"><dt>Ratelist Name</dt><dd>${r.ratelist_name||"—"}</dd></div>
+      <div class="detail-item"><dt>Product SKU</dt><dd>${r.product_sku||"—"}</dd></div>
       <div class="detail-item"><dt>Distrbn MOQ</dt><dd>${r.min_distrbn_qty!=null?fmtNum(r.min_distrbn_qty):"—"}</dd></div>
     </dl>
     <div style="margin-top:12px;display:flex;gap:8px">
@@ -1603,6 +1615,7 @@ function computeAdjusted(closing, adjustment) {
         launch_start: m.launch_start || m.launch_dt || '',
         launch_end: m.launch_end || '',
         ratelist_name: m.ratelist_name || '',
+        product_sku: m.product_sku || '',
         blr_v2: m.blr_v2 || '',
         ncr_v2: m.ncr_v2 || '',
         chn_v2: m.chn_v2 || '',
@@ -1807,6 +1820,7 @@ async function editMaterialField(sku, field, value) {
     else if (field === 'launch_start') row.launch_start = value;
     else if (field === 'launch_end') row.launch_end = value;
     else if (field === 'ratelist_name') row.ratelist_name = value;
+    else if (field === 'product_sku') row.product_sku = value;
     else if (field === 'blr_v2') row.blr_v2 = value;
     else if (field === 'ncr_v2') row.ncr_v2 = value;
     else if (field === 'chn_v2') row.chn_v2 = value;
@@ -2001,6 +2015,7 @@ function openEditModal(sku) {
     ${_efDate('Launch Start Date','ed-launch-start',r.launch_start)}
     ${_efDate('Launch End Date','ed-launch-end',r.launch_end)}
     ${_ef('Ratelist Name','ed-ratelist',r.ratelist_name)}
+    ${_ef('Product SKU','ed-productsku',r.product_sku)}
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Vendors</div>
     ${_ef('BLR Vendor','ed-blr',r._blr_vendor_raw,'format: Name-LeadTime e.g. Canvera-3')}
     ${_ef('BLR Vendor 2','ed-blr2',r.blr_v2)}
@@ -2072,6 +2087,7 @@ document.addEventListener('click', async (e) => {
       const launchStart= document.getElementById('ed-launch-start').value.trim();
       const launchEnd= document.getElementById('ed-launch-end').value.trim();
       const ratelist=document.getElementById('ed-ratelist').value.trim();
+      const productsku=document.getElementById('ed-productsku').value.trim();
       const blr2  = document.getElementById('ed-blr2').value.trim();
       const ncr2  = document.getElementById('ed-ncr2').value.trim();
       const chn2  = document.getElementById('ed-chn2').value.trim();
@@ -2082,6 +2098,7 @@ document.addEventListener('click', async (e) => {
       if (launchStart !== String(r.launch_start ?? '')) edits.push(editMaterialField(_editSku,'launch_start', launchStart||null));
       if (launchEnd !== String(r.launch_end ?? '')) edits.push(editMaterialField(_editSku,'launch_end', launchEnd||null));
       if (ratelist !== String(r.ratelist_name ?? '')) edits.push(editMaterialField(_editSku,'ratelist_name', ratelist||null));
+      if (productsku !== String(r.product_sku ?? '')) edits.push(editMaterialField(_editSku,'product_sku', productsku||null));
       if (blr2 !== String(r.blr_v2 ?? '')) edits.push(editMaterialField(_editSku,'blr_v2', blr2||null));
       if (ncr2 !== String(r.ncr_v2 ?? '')) edits.push(editMaterialField(_editSku,'ncr_v2', ncr2||null));
       if (chn2 !== String(r.chn_v2 ?? '')) edits.push(editMaterialField(_editSku,'chn_v2', chn2||null));
@@ -2801,6 +2818,7 @@ const UPLOAD_MAP = {
   "BLR HUB Capacity":             { c:"materials", f:"blr_hub_capacity", num:true },
   "Distrbn MOQ":                  { c:"materials", f:"min_distrbn_qty", num:true },
   "Ratelist Name":                { c:"materials", f:"ratelist_name" },
+  "Product SKU":                  { c:"materials", f:"product_sku" },
   "Seasonal Consumption":         { c:"vm_classification", f:"seasonal_consumption", num:true },
   "Launch Start Date":            { c:"materials", f:"launch_start" },
   "Launch End Date":              { c:"materials", f:"launch_end" },
@@ -2838,7 +2856,7 @@ function _uploadModalHTML() {
 }
 
 function _downloadTemplate() {
-  const sample = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,15,30,5,19,"","","",1000,10,"RL-2024",25,"2024-04-01","2024-12-31"];
+  const sample = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,15,30,5,19,"","","",1000,10,"RL-2024","PRDSKU01",25,"2024-04-01","2024-12-31"];
   const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, sample]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Materials Upload");
