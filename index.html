@@ -1,0 +1,3143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Materials — Printo Operations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, query, where, runTransaction, writeBatch }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCITb5IznWkdftR4Eo4DUfswxe0FFWfSLA",
+    authDomain: "material-printo.firebaseapp.com",
+    projectId: "material-printo",
+    storageBucket: "material-printo.firebasestorage.app",
+    messagingSenderId: "278345695240",
+    appId: "1:278345695240:web:fe36569379f555349551bd",
+    measurementId: "G-20KYWWE6R9"
+  };
+  const _app = initializeApp(FIREBASE_CONFIG);
+  // database is named "default" (not the implicit one)
+  const _fs = getFirestore(_app, "default");
+  // expose a tiny compat-like wrapper so the rest of the (compat-style) code works unchanged
+  window._FS = _fs;
+  window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, query, where, runTransaction, writeBatch };
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+<style>
+  :root{
+    --bg:#FFFFFF;
+    --surface:#F4F6F9;
+    --surface-2:#EAECF0;
+    --border:#DDE1E8;
+    --border-2:#C4CAD4;
+    --text:#111827;
+    --text-2:#374151;
+    --text-3:#6B7280;
+    --text-4:#9CA3AF;
+
+    --navy:#1B3560;
+    --navy-hover:#142849;
+    --navy-light:#E8EDF5;
+    --navy-soft:#F0F4FA;
+
+    --orange:#F57224;
+    --orange-hover:#D45E0F;
+    --orange-soft:#FFF3EC;
+    --orange-light:#FFD9BF;
+
+    --green:#15803D;
+    --green-soft:#DCFCE7;
+    --red:#B91C1C;
+    --red-soft:#FEE2E2;
+    --amber:#B45309;
+    --amber-soft:#FEF3C7;
+    --blue:#1D4ED8;
+    --blue-soft:#DBEAFE;
+
+    --shadow-sm:0 1px 3px rgba(17,24,39,.06);
+    --shadow-md:0 4px 12px rgba(17,24,39,.08), 0 1px 3px rgba(17,24,39,.05);
+    --shadow-lg:0 10px 30px rgba(17,24,39,.1), 0 2px 8px rgba(17,24,39,.06);
+
+    --sans:'Inter', system-ui, sans-serif;
+    --mono:'JetBrains Mono', ui-monospace, monospace;
+    --radius:6px;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--sans);
+    background:var(--surface);
+    color:var(--text);
+    font-size:14px;line-height:1.5;font-weight:400;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ===== TOPBAR ===== */
+  .topbar{
+    position:sticky;top:0;z-index:30;
+    background:var(--navy);
+    box-shadow:0 2px 8px rgba(0,0,0,.2);
+  }
+  .topbar-row{
+    max-width:1640px;margin:0 auto;
+    padding:0 28px;
+    display:flex;align-items:center;gap:20px;
+    height:60px;
+  }
+  .brand{display:flex;align-items:center;gap:12px;text-decoration:none;flex-shrink:0}
+  .logo-mark{display:inline-flex;align-items:center;gap:0;font-size:20px;font-weight:700;line-height:1}
+  .logo-p{
+    background:var(--orange);color:#fff;
+    width:28px;height:28px;border-radius:6px;
+    display:inline-flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:16px;margin-right:2px;
+  }
+  .logo-text{color:#fff;font-size:18px;letter-spacing:-.01em}
+  .brand-divider{width:1px;height:20px;background:rgba(255,255,255,.2);margin:0 6px}
+  .brand-tag{
+    font-size:11px;color:rgba(255,255,255,.6);
+    text-transform:uppercase;letter-spacing:.1em;font-weight:500;
+  }
+  .search-wrap{position:relative;flex:1;max-width:440px;margin-left:auto}
+  .search-input{
+    width:100%;padding:9px 12px 9px 36px;
+    border:1.5px solid rgba(255,255,255,.15);
+    background:rgba(255,255,255,.1);
+    border-radius:var(--radius);font:inherit;font-size:14px;
+    color:#fff;outline:none;
+    transition:border-color .15s, background .15s;
+  }
+  .search-input:focus{
+    border-color:var(--orange);background:rgba(255,255,255,.15);
+  }
+  .search-input::placeholder{color:rgba(255,255,255,.45)}
+  .search-icon{
+    position:absolute;left:11px;top:50%;transform:translateY(-50%);
+    width:16px;height:16px;color:rgba(255,255,255,.5);pointer-events:none;
+  }
+  .search-hint{
+    position:absolute;right:9px;top:50%;transform:translateY(-50%);
+    font-family:var(--mono);font-size:10px;color:rgba(255,255,255,.4);
+    background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);
+    padding:1px 6px;border-radius:3px;
+  }
+  .user-chip{
+    display:flex;align-items:center;gap:8px;
+    padding:6px 12px 6px 6px;border-radius:20px;
+    background:rgba(255,255,255,.1);font-size:13px;
+    color:rgba(255,255,255,.85);
+    border:1px solid rgba(255,255,255,.15);cursor:pointer;
+    transition:background .15s;
+  }
+  .user-chip:hover{background:rgba(255,255,255,.18)}
+  .user-avatar{
+    width:26px;height:26px;border-radius:50%;
+    background:var(--orange);color:#fff;
+    display:inline-flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:600;
+  }
+
+  /* ===== TABS ===== */
+  .tabs-row{
+    background:var(--bg);
+    border-bottom:1px solid var(--border);
+    box-shadow:var(--shadow-sm);
+  }
+  .tabs-inner{
+    max-width:1640px;margin:0 auto;
+    padding:0 28px;
+    display:flex;align-items:center;
+    height:46px;gap:2px;
+  }
+  .tab{
+    position:relative;
+    padding:0 16px;height:46px;
+    display:inline-flex;align-items:center;gap:7px;
+    font-size:14px;font-weight:500;color:var(--text-3);
+    cursor:pointer;background:transparent;border:0;
+    border-bottom:3px solid transparent;
+    transition:color .12s, border-color .12s;
+    user-select:none;margin-bottom:-1px;
+  }
+  .tab:hover{color:var(--text-2)}
+  .tab.active{color:var(--navy);border-bottom-color:var(--orange);font-weight:600}
+  .tab .chev{font-size:10px;color:var(--text-4);transition:transform .15s}
+  .tab.tab-special{color:var(--orange);font-weight:600}
+  .tab.tab-special.active{color:var(--orange);border-bottom-color:var(--orange)}
+  .tab.tab-special:hover{color:var(--orange-hover)}
+
+  /* ===== MENUS ===== */
+  .menu{
+    position:fixed;background:var(--bg);
+    border:1px solid var(--border);border-radius:8px;
+    box-shadow:var(--shadow-lg);padding:6px;
+    min-width:220px;max-width:520px;z-index:100;
+    display:none;max-height:80vh;overflow:auto;
+  }
+  .menu.open{display:block}
+  .menu-section{padding:4px}
+  .menu-section + .menu-section{border-top:1px solid var(--border);margin-top:4px;padding-top:8px}
+  .menu-heading{
+    font-size:11px;color:var(--text-4);
+    text-transform:uppercase;letter-spacing:.08em;
+    padding:4px 10px;font-weight:600;
+  }
+  .menu-item{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:9px 12px;border-radius:5px;border:0;
+    background:transparent;text-align:left;width:100%;
+    cursor:pointer;font:inherit;font-size:14px;color:var(--text);
+    transition:background .1s;
+  }
+  .menu-item:hover{background:var(--surface)}
+  .menu-item.selected{background:var(--navy-soft);color:var(--navy);font-weight:600}
+  .menu-item .count{font-family:var(--mono);font-size:11px;color:var(--text-4);padding-left:10px}
+  .menu-item.selected .count{color:var(--navy)}
+  .menu-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:4px}
+  .menu-grid .menu-section + .menu-section{border-top:0;margin-top:0;padding-top:0;border-left:1px solid var(--border);padding-left:10px;margin-left:10px}
+
+  /* ===== MAIN ===== */
+  main{max-width:1640px;margin:0 auto;padding:24px 28px 60px}
+
+  .page-head{
+    display:flex;align-items:flex-start;justify-content:space-between;
+    margin-bottom:18px;gap:16px;flex-wrap:wrap;
+    padding-bottom:16px;border-bottom:1px solid var(--border);
+  }
+  .page-title{font-size:22px;font-weight:700;color:var(--navy);letter-spacing:-.02em}
+  .page-subtitle{font-size:13px;color:var(--text-3);margin-top:3px}
+  .page-actions{display:flex;gap:8px;align-items:center}
+
+  .btn{
+    padding:9px 16px;border-radius:var(--radius);
+    border:1.5px solid var(--border);background:var(--bg);
+    color:var(--text-2);font:inherit;font-size:13px;font-weight:500;
+    cursor:pointer;transition:all .15s;
+    display:inline-flex;align-items:center;gap:7px;line-height:1;
+  }
+  .btn:hover{background:var(--surface);border-color:var(--border-2);color:var(--text)}
+  .btn.primary{background:var(--navy);border-color:var(--navy);color:#fff}
+  .btn.primary:hover{background:var(--navy-hover);border-color:var(--navy-hover)}
+  .btn.accent{background:var(--orange);border-color:var(--orange);color:#fff}
+  .btn.accent:hover{background:var(--orange-hover);border-color:var(--orange-hover)}
+
+  /* ===== FILTER BAR ===== */
+  .filter-bar{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:var(--bg);border:1.5px solid var(--border);
+    border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;
+    min-height:48px;
+  }
+  .filter-bar-label{
+    font-size:12px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--text-4);font-weight:600;
+  }
+  .filter-bar-empty{font-size:13px;color:var(--text-4);font-style:italic}
+  .filter-chip{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:4px 6px 4px 10px;background:var(--surface);
+    border:1.5px solid var(--border);border-radius:20px;
+    font-size:13px;color:var(--text-2);font-weight:500;
+  }
+  .filter-chip.region{background:var(--navy-soft);border-color:var(--navy-light);color:var(--navy)}
+  .filter-chip .x{
+    width:18px;height:18px;border:0;background:rgba(0,0,0,.06);
+    color:var(--text-3);cursor:pointer;font-size:14px;line-height:1;
+    display:inline-flex;align-items:center;justify-content:center;
+    border-radius:50%;transition:background .1s;
+  }
+  .filter-chip .x:hover{background:var(--red);color:#fff}
+  .filter-chip.region .x{background:rgba(27,53,96,.1);color:var(--navy)}
+  .filter-chip.region .x:hover{background:var(--navy);color:#fff}
+  .clear-link{
+    margin-left:auto;border:0;background:transparent;
+    color:var(--orange);font:inherit;font-size:13px;font-weight:500;
+    cursor:pointer;padding:4px 8px;border-radius:4px;
+  }
+  .clear-link:hover{background:var(--orange-soft);color:var(--orange-hover)}
+
+  /* ===== KPI STRIP ===== */
+  .kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  .kpi-card{
+    background:var(--bg);border:1.5px solid var(--border);border-radius:8px;
+    padding:16px 18px;display:flex;flex-direction:column;gap:6px;
+    border-left:4px solid var(--navy);
+    transition:box-shadow .15s;
+  }
+  .kpi-card:hover{box-shadow:var(--shadow-md)}
+  .kpi-card.orange{border-left-color:var(--orange)}
+  .kpi-card.green{border-left-color:var(--green)}
+  .kpi-card.red{border-left-color:var(--red)}
+  .kpi-label{
+    font-size:11px;color:var(--text-3);font-weight:600;
+    text-transform:uppercase;letter-spacing:.06em;
+  }
+  .kpi-value{
+    font-size:28px;font-weight:700;color:var(--navy);
+    letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums;
+  }
+  .kpi-value .small{font-size:15px;color:var(--text-3);font-weight:400}
+  .kpi-sub{font-size:12px;color:var(--text-4)}
+
+  /* ===== DATA CARD / TABLE ===== */
+  .data-card{
+    background:var(--bg);border:1.5px solid var(--border);
+    border-radius:8px;overflow:hidden;
+    box-shadow:var(--shadow-sm);
+  }
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  thead{background:var(--surface);border-bottom:2px solid var(--border)}
+  thead th{
+    text-align:left;padding:11px 16px;
+    font-size:11px;font-weight:700;color:var(--text-3);
+    text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;
+  }
+  thead th.num{text-align:right}
+  tbody tr{border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
+  tbody tr:last-child{border-bottom:0}
+  tbody tr:hover{background:#F7F9FC}
+  tbody tr.expanded{background:var(--navy-soft)}
+  tbody td{padding:13px 16px;vertical-align:middle;border:0}
+  td.sku{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--navy)}
+  td.desc{max-width:300px;font-size:14px;line-height:1.4;color:var(--text)}
+  td.cat-cell{font-size:13px;color:var(--text-2)}
+  td.cat-cell .major{
+    display:inline-block;font-size:10px;color:var(--text-4);
+    text-transform:uppercase;letter-spacing:.04em;font-weight:600;
+    margin-right:4px;
+  }
+  td.num{font-family:var(--mono);text-align:right;font-size:13px;font-variant-numeric:tabular-nums}
+  td.num.muted{color:var(--text-4)}
+  td.num .unit{font-size:11px;color:var(--text-4);margin-left:2px}
+  td.vendor-cell{font-size:13px;color:var(--text-2);max-width:160px}
+  td.vendor-cell .alt{display:block;font-size:11px;color:var(--text-3);margin-top:2px}
+  td.vendor-cell .cs-tag{
+    display:inline-block;font-family:var(--mono);font-size:10px;
+    color:var(--text-3);background:var(--surface);
+    border:1px solid var(--border);padding:1px 6px;border-radius:3px;
+  }
+  td.reorder-cell{font-size:13px;color:var(--text-2)}
+  td.reorder-cell .freq{display:block;font-size:11px;color:var(--text-3);margin-top:2px;font-family:var(--mono)}
+
+  /* City pills */
+  .cities{display:flex;gap:3px}
+  .city{
+    width:22px;height:22px;font-size:10px;font-weight:700;
+    display:inline-flex;align-items:center;justify-content:center;
+    background:var(--surface-2);color:var(--text-4);
+    border:1px solid var(--border);border-radius:4px;
+    font-family:var(--mono);
+  }
+  .city.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .city.discon{background:var(--surface-2);color:var(--text-4);text-decoration:line-through}
+
+  /* Status / Criticality pills */
+  .pill{
+    display:inline-flex;align-items:center;
+    padding:3px 10px;font-size:12px;font-weight:600;
+    border-radius:20px;border:1.5px solid transparent;line-height:1.4;
+  }
+  .pill::before{content:"";width:6px;height:6px;border-radius:50%;margin-right:6px}
+  .pill.vhigh{background:var(--red-soft);color:var(--red);border-color:#FECACA}
+  .pill.vhigh::before{background:var(--red)}
+  .pill.high{background:var(--orange-soft);color:var(--orange-hover);border-color:var(--orange-light)}
+  .pill.high::before{background:var(--orange)}
+  .pill.med{background:var(--amber-soft);color:var(--amber);border-color:#FDE68A}
+  .pill.med::before{background:#D97706}
+  .pill.low{background:var(--green-soft);color:var(--green);border-color:#BBF7D0}
+  .pill.low::before{background:var(--green)}
+  .pill.active{background:var(--green-soft);color:var(--green);border-color:#BBF7D0}
+  .pill.active::before{background:var(--green)}
+  .pill.disc{background:var(--surface-2);color:var(--text-3);border-color:var(--border-2)}
+  .pill.disc::before{background:var(--text-4)}
+
+  /* ===== DETAIL ROW ===== */
+  .detail-row td{
+    background:var(--navy-soft);border-top:1px solid var(--border);
+    padding:20px 16px 24px;
+  }
+  .detail-section{margin-bottom:20px}
+  .detail-section:last-child{margin-bottom:0}
+  .detail-section h5{
+    font-size:11px;color:var(--navy);text-transform:uppercase;
+    letter-spacing:.08em;font-weight:700;
+    margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--orange);
+    display:inline-block;
+  }
+  .detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px 28px}
+  .detail-item dt{font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-bottom:3px}
+  .detail-item dd{font-size:14px;color:var(--text);font-weight:500}
+  .detail-item dd.empty{color:var(--text-4);font-style:italic;font-weight:400}
+
+  /* Region matrix */
+  .region-matrix{
+    display:grid;grid-template-columns:repeat(5,1fr);
+    border:1.5px solid var(--border);border-radius:8px;
+    background:var(--bg);overflow:hidden;
+  }
+  .region-col{padding:16px;border-right:1px solid var(--border)}
+  .region-col:last-child{border-right:0}
+  .region-col.inactive{background:var(--surface);opacity:.7}
+  .region-col-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+  .region-col-name{font-size:14px;font-weight:700;color:var(--navy)}
+  .region-col-flag{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .region-col-flag.flag-on{color:var(--green)}
+  .region-col-flag.flag-disc{color:var(--text-4)}
+  .region-col dl{display:grid;gap:10px}
+  .region-col dt{font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+  .region-col dd{font-size:13px;color:var(--text);word-break:break-word;font-weight:500}
+  .region-col dd.empty{color:var(--text-4);font-style:italic;font-weight:400}
+  .region-col dd .num-val{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--navy)}
+
+  /* Region strip */
+  .region-strip{
+    background:var(--navy);color:#fff;
+    border-radius:8px;padding:16px 22px;margin-bottom:16px;
+    display:flex;align-items:center;gap:28px;flex-wrap:wrap;
+    border-left:5px solid var(--orange);
+  }
+  .region-strip-name{font-size:20px;font-weight:700;color:#fff}
+  .region-strip-code{
+    font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.65);
+    background:rgba(255,255,255,.12);padding:3px 8px;border-radius:4px;
+    margin-left:8px;letter-spacing:.06em;font-weight:500;
+  }
+  .region-strip-stats{display:flex;gap:28px;margin-left:auto}
+  .rss-label{font-size:11px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:2px}
+  .rss-val{font-size:20px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+  .rss-val em{color:#FFB373;font-style:normal}
+
+  .empty-state{text-align:center;padding:64px 20px;color:var(--text-3);font-size:15px}
+
+  /* ===== ANALYTICS ===== */
+  .table-view.hidden,.analytics-view{display:none}
+  .analytics-view.active{display:block}
+  .table-view{display:block}
+
+  .chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .chart-card{
+    background:var(--bg);border:1.5px solid var(--border);border-radius:8px;
+    display:flex;flex-direction:column;box-shadow:var(--shadow-sm);
+    transition:box-shadow .15s;
+  }
+  .chart-card:hover{box-shadow:var(--shadow-md)}
+  .chart-card.wide{grid-column:span 2}
+  .chart-head{
+    padding:14px 16px;border-bottom:1px solid var(--border);
+    display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .chart-title{
+    font-size:15px;font-weight:600;color:var(--navy);
+    cursor:text;outline:none;border-radius:3px;padding:1px 4px;margin-left:-4px;
+  }
+  .chart-title:hover{background:var(--surface)}
+  .chart-title:focus{background:var(--navy-soft)}
+  .chart-config{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .config-pill{
+    display:inline-flex;align-items:center;gap:4px;
+    padding:4px 10px;background:var(--surface);
+    border:1.5px solid var(--border);border-radius:20px;
+    font-size:12px;color:var(--text-2);font-weight:500;
+    cursor:pointer;transition:all .1s;
+  }
+  .config-pill:hover{background:var(--navy-soft);color:var(--navy);border-color:var(--navy-light)}
+  .config-pill::before{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-right:3px}
+  .config-pill.dim::before{content:"DIM";color:var(--orange)}
+  .config-pill.measure::before{content:"MSR";color:var(--navy)}
+  .config-pill.type::before{content:"TYP";color:var(--text-3)}
+  .config-pill::after{content:"▾";font-size:9px;color:var(--text-3);margin-left:3px}
+  .chart-body{padding:16px;flex:1;min-height:240px;position:relative}
+  .chart-card.wide .chart-body{min-height:300px}
+  .chart-foot{
+    padding:9px 16px;border-top:1px solid var(--border);
+    background:var(--surface);
+    display:flex;justify-content:space-between;align-items:center;
+    font-size:12px;color:var(--text-3);border-radius:0 0 8px 8px;
+  }
+  .chart-foot .delete-chart{border:0;background:transparent;color:var(--text-3);cursor:pointer;font:inherit;font-size:12px}
+  .chart-foot .delete-chart:hover{color:var(--red)}
+
+  .add-chart{
+    background:var(--bg);border:2px dashed var(--border-2);border-radius:8px;
+    padding:44px 20px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:8px;
+    cursor:pointer;color:var(--text-3);transition:all .15s;font:inherit;font-size:14px;
+  }
+  .add-chart:hover{border-color:var(--orange);color:var(--orange);background:var(--orange-soft)}
+  .add-chart .plus{font-size:28px;line-height:.8;color:var(--orange)}
+  .add-chart small{font-size:12px;color:var(--text-4)}
+
+  @media (max-width:1100px){
+    .topbar-row{flex-wrap:wrap;height:auto;padding:10px 16px}
+    .search-wrap{order:3;flex-basis:100%;max-width:100%;margin-left:0}
+    .tabs-inner{padding:0 16px;overflow-x:auto;flex-wrap:nowrap}
+    main{padding:16px 16px 60px}
+    .chart-grid{grid-template-columns:1fr}
+    .chart-card.wide{grid-column:span 1}
+    .kpi-strip{grid-template-columns:repeat(2,1fr)}
+    .region-matrix{grid-template-columns:repeat(2,1fr)}
+    .region-col{border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+    td.desc{max-width:200px}
+  }
+
+  .loading-overlay{
+    position:fixed;inset:0;background:#1B3560;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    z-index:9999;transition:opacity .5s ease;
+  }
+  .loading-overlay.hidden{opacity:0;pointer-events:none}
+  .loading-logo{color:#fff;font-size:30px;font-weight:700;margin-bottom:28px;letter-spacing:-.02em}
+  .loading-logo span{color:#F57224}
+  .loading-bar-wrap{width:260px;height:5px;background:rgba(255,255,255,.15);border-radius:4px;overflow:hidden}
+  .loading-bar{height:100%;width:0%;background:#F57224;border-radius:4px;transition:width .4s ease}
+  .loading-text{color:rgba(255,255,255,.55);font-size:13px;margin-top:16px;font-family:Inter,sans-serif}
+  .loading-error{color:#FF6B6B;font-size:13px;margin-top:16px;text-align:center;max-width:300px}
+
+
+  /* Search suggestions */
+  .search-wrap{position:relative}
+  .search-sugs{
+    position:absolute;top:calc(100% + 4px);left:0;right:0;
+    background:var(--bg);border:1.5px solid var(--border);
+    border-radius:var(--radius);box-shadow:var(--shadow-lg);
+    z-index:200;display:none;max-height:300px;overflow-y:auto;
+  }
+  .search-sugs.open{display:block}
+  .sug-item{
+    padding:9px 14px;cursor:pointer;
+    display:flex;align-items:center;gap:12px;
+    border-bottom:1px solid var(--border);
+    transition:background .1s;
+  }
+  .sug-item:last-child{border-bottom:0}
+  .sug-item:hover{background:var(--navy-soft)}
+  .sug-sku{font-family:var(--mono);font-size:12px;color:var(--navy);font-weight:700;min-width:100px}
+  .sug-desc{font-size:13px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+  .sug-cat{font-size:11px;color:var(--text-4);margin-left:auto;white-space:nowrap}
+
+  /* Modal */
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(0,0,0,.45);
+    z-index:500;align-items:center;justify-content:center;
+    display:none;
+  }
+  .modal-backdrop.open{display:flex}
+  .modal{
+    background:var(--bg);border-radius:10px;
+    width:580px;max-width:96vw;max-height:88vh;
+    overflow-y:auto;box-shadow:var(--shadow-lg);
+  }
+  .modal-hd{
+    padding:20px 24px;border-bottom:1.5px solid var(--border);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .modal-hd-title{font-size:18px;font-weight:700;color:var(--navy)}
+  .modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-3);line-height:1}
+  .modal-tabs{display:flex;padding:0 24px;border-bottom:1px solid var(--border);gap:2px}
+  .mtab{
+    padding:11px 14px;font-size:13px;font-weight:500;color:var(--text-3);
+    cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:0;border-left:0;border-right:0;
+    transition:color .12s,border-color .12s;
+  }
+  .mtab.active{color:var(--navy);border-bottom-color:var(--orange);font-weight:600}
+  .modal-body{padding:20px 24px}
+  .form-row{margin-bottom:14px}
+  .form-row.half{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .form-lbl{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;display:block}
+  .form-inp{
+    width:100%;padding:9px 12px;border:1.5px solid var(--border);
+    border-radius:var(--radius);font:inherit;font-size:14px;color:var(--text);outline:none;
+    transition:border-color .12s;background:var(--bg);
+  }
+  .form-inp:focus{border-color:var(--navy)}
+  .form-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+  .modal-ft{padding:16px 24px;border-top:1.5px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
+  .form-msg{font-size:13px;padding:8px 12px;border-radius:var(--radius);margin-top:10px;display:none}
+  .form-msg.ok{background:var(--green-soft);color:var(--green);display:block}
+  .form-msg.err{background:var(--red-soft);color:var(--red);display:block}
+
+
+  /* Reorder type pills */
+  .rpill{
+    display:inline-flex;align-items:center;
+    padding:2px 9px;font-size:11px;font-weight:600;
+    border-radius:20px;border:1.5px solid transparent;line-height:1.5;
+    white-space:nowrap;
+  }
+  .rpill.str-reorder{background:#DBEAFE;color:#1E3A8A;border-color:#BFDBFE}
+  .rpill.str-req{background:#EDE9FE;color:#4C1D95;border-color:#DDD6FE}
+  .rpill.hub-reorder{background:#FEF3C7;color:#92400E;border-color:#FDE68A}
+  .rpill.hub-req{background:#FFEDD5;color:#9A3412;border-color:#FED7AA}
+  .rpill.vm-req{background:#E0F2FE;color:#0C4A6E;border-color:#BAE6FD}
+  .rpill.outstation{background:#FCE7F3;color:#831843;border-color:#FBCFE8}
+  .rpill.canvera{background:#DCFCE7;color:#14532D;border-color:#BBF7D0}
+  .rpill.discontinued{background:#F1F5F9;color:#475569;border-color:#CBD5E1}
+  .rpill.other{background:#F3F4F6;color:#374151;border-color:#E5E7EB}
+
+
+  /* Region Dashboard */
+  .region-view{display:none}
+  .region-view.active{display:block}
+  .table-view.hidden{display:none}
+
+  .rdash-header{
+    background:var(--navy);border-radius:10px;
+    padding:24px 28px;margin-bottom:20px;
+    display:flex;align-items:center;gap:24px;flex-wrap:wrap;
+    border-left:6px solid var(--orange);
+    box-shadow:var(--shadow-md);
+  }
+  .rdash-back{
+    background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.25);
+    color:#fff;padding:8px 14px;border-radius:var(--radius);
+    font:inherit;font-size:13px;font-weight:500;cursor:pointer;
+    display:flex;align-items:center;gap:6px;transition:background .15s;
+  }
+  .rdash-back:hover{background:rgba(255,255,255,.25)}
+  .rdash-title{font-size:26px;font-weight:700;color:#fff;letter-spacing:-.02em}
+  .rdash-subtitle{font-size:13px;color:rgba(255,255,255,.6);margin-top:2px}
+  .rdash-stats{display:flex;gap:32px;margin-left:auto;flex-wrap:wrap}
+  .rdash-stat-label{font-size:11px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:3px}
+  .rdash-stat-val{font-size:22px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+  .rdash-stat-val em{color:#FFB373;font-style:normal}
+
+  .rdash-pivot{
+    display:grid;grid-template-columns:repeat(3,1fr);
+    gap:14px;margin-bottom:20px;
+  }
+  .rdash-pivot-card{
+    background:var(--bg);border:1.5px solid var(--border);
+    border-radius:8px;overflow:hidden;box-shadow:var(--shadow-sm);
+  }
+  .rdash-pivot-card.wide{grid-column:span 2}
+  .rdash-pivot-head{
+    padding:12px 16px;border-bottom:1px solid var(--border);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .rdash-pivot-title{font-size:14px;font-weight:600;color:var(--navy)}
+  .rdash-pivot-body{padding:14px;min-height:200px;position:relative}
+  .rdash-pivot-body.tall{min-height:260px}
+
+  .rdash-divider{
+    display:flex;align-items:center;gap:12px;margin:24px 0 16px;
+  }
+  .rdash-divider-line{flex:1;height:1px;background:var(--border)}
+  .rdash-divider-label{
+    font-size:12px;font-weight:700;color:var(--text-3);
+    text-transform:uppercase;letter-spacing:.08em;
+    background:var(--surface);padding:4px 12px;
+    border:1px solid var(--border);border-radius:20px;
+    white-space:nowrap;
+  }
+
+  .rdash-summary-grid{
+    display:grid;grid-template-columns:repeat(4,1fr);
+    gap:12px;margin-bottom:20px;
+  }
+
+  @media(max-width:1100px){
+    .rdash-pivot{grid-template-columns:1fr}
+    .rdash-pivot-card.wide{grid-column:span 1}
+    .rdash-summary-grid{grid-template-columns:repeat(2,1fr)}
+    .rdash-stats{margin-left:0}
+  }
+
+
+  /* Region sub-tabs */
+  .rdash-subtabs{
+    display:flex;gap:2px;border-bottom:1.5px solid var(--border);
+    margin-bottom:18px;padding:0 4px;overflow-x:auto;
+  }
+  .rdash-subtab{
+    padding:10px 16px;font-size:13px;font-weight:500;color:var(--text-3);
+    cursor:pointer;border:0;background:transparent;border-bottom:2.5px solid transparent;
+    transition:color .12s,border-color .12s;white-space:nowrap;margin-bottom:-1.5px;
+  }
+  .rdash-subtab:hover{color:var(--text-2)}
+  .rdash-subtab.active{color:var(--navy);border-bottom-color:var(--orange);font-weight:600}
+  .rdash-subtab .badge{
+    display:inline-block;background:var(--surface-2);color:var(--text-3);
+    font-size:10px;padding:1px 7px;border-radius:10px;margin-left:6px;
+    font-weight:600;font-family:var(--mono);
+  }
+  .rdash-subtab.active .badge{background:var(--orange-soft);color:var(--orange-hover)}
+  .rdash-subtab.alert .badge{background:var(--red-soft);color:var(--red)}
+
+  .rdash-panel{display:none}
+  .rdash-panel.active{display:block}
+
+  /* Pivot tables */
+  .pivot-table{
+    width:100%;border-collapse:collapse;font-size:13px;
+    background:var(--bg);border:1.5px solid var(--border);border-radius:8px;
+    overflow:hidden;
+  }
+  .pivot-table thead{background:var(--navy);color:#fff}
+  .pivot-table thead th{
+    padding:12px 14px;text-align:left;font-weight:600;font-size:12px;
+    text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;
+    border-bottom:0;
+  }
+  .pivot-table thead th.num{text-align:right}
+  .pivot-table tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+  .pivot-table tbody tr:last-child{border-bottom:0}
+  .pivot-table tbody tr:hover{background:#F7F9FC}
+  .pivot-table tbody tr.total-row{
+    background:var(--navy-soft);font-weight:700;
+    border-top:2px solid var(--navy);
+  }
+  .pivot-table tbody tr.total-row:hover{background:var(--navy-soft)}
+  .pivot-table tbody td{padding:11px 14px;font-size:13px;color:var(--text)}
+  .pivot-table tbody td.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+  .pivot-table tbody td.num.muted{color:var(--text-4)}
+  .pivot-table tbody td.label{font-weight:500;color:var(--text)}
+  .pivot-table tbody td.bar-cell{position:relative;min-width:140px}
+  .pivot-table .bar-bg{
+    position:absolute;left:14px;right:14px;top:50%;height:5px;transform:translateY(50%);
+    background:var(--surface-2);border-radius:3px;overflow:hidden;
+  }
+  .pivot-table .bar-fill{height:100%;background:var(--navy);border-radius:3px;transition:width .3s}
+  .pivot-table .bar-fill.orange{background:var(--orange)}
+  .pivot-table .bar-fill.red{background:var(--red)}
+  .pivot-table .bar-fill.green{background:var(--green)}
+  .pivot-table .bar-label{position:relative;z-index:1;font-family:var(--mono);font-size:11px;color:var(--text-3);padding-right:8px}
+
+  .alert-pill{
+    display:inline-flex;align-items:center;padding:3px 8px;
+    background:var(--red-soft);color:var(--red);
+    font-size:11px;font-weight:600;border-radius:4px;
+  }
+  .alert-pill.warn{background:var(--amber-soft);color:var(--amber)}
+  .alert-pill.ok{background:var(--green-soft);color:var(--green)}
+
+
+  .detail-item dt span{display:inline-block;padding:1px 5px;background:var(--orange-soft);color:var(--orange-hover);border-radius:3px;margin-left:4px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-logo">p<span>rinto</span> materials</div>
+  <div class="loading-bar-wrap"><div class="loading-bar" id="loading-bar"></div></div>
+  <div class="loading-text" id="loading-text">Connecting to database...</div>
+  <div class="loading-error" id="loading-error" style="display:none"></div>
+</div>
+<header class="topbar">
+  <div class="topbar-row">
+    <a class="brand" href="#">
+      <span class="logo-mark"><span class="logo-p">p</span><span class="logo-text">rinto</span></span>
+      <span class="brand-divider"></span>
+      <span class="brand-tag">Materials Operations</span>
+    </a>
+
+    <div class="search-wrap">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="search" class="search-input" type="text" placeholder="Search SKU or material name..." autocomplete="off">
+      <span class="search-hint">⌘K</span>
+      <div class="search-sugs" id="search-sugs"></div>
+    </div>
+
+    <div class="user-chip" title="Operations Team">
+      <span class="user-avatar">P</span>
+      <span>Operations</span>
+    </div>
+  </div>
+</header>
+
+<div class="tabs-row">
+  <div class="tabs-inner" id="tabs">
+    <button class="tab active" data-tab="all">All Materials</button>
+    <button class="tab" data-menu="categories" aria-expanded="false">Category <span class="chev">▾</span></button>
+    <button class="tab" data-menu="regions" aria-expanded="false">Region <span class="chev">▾</span></button>
+    <button class="tab" data-menu="criticality" aria-expanded="false">Criticality <span class="chev">▾</span></button>
+    <button class="tab" data-menu="status" aria-expanded="false">Status <span class="chev">▾</span></button>
+    <button class="tab tab-special" data-tab="analytics">Analytics</button>
+  </div>
+</div>
+
+<!-- MENUS -->
+<div class="menu" id="menu-categories" data-menu-id="categories">
+  <div class="menu-grid">
+    <div class="menu-section">
+      <div class="menu-heading">Paper</div>
+      <div data-major-list="Paper"></div>
+    </div>
+    <div class="menu-section">
+      <div class="menu-heading">Finishing</div>
+      <div data-major-list="Finishing"></div>
+    </div>
+    <div class="menu-section">
+      <div class="menu-heading">ID Card</div>
+      <div data-major-list="ID Card Consumables"></div>
+    </div>
+  </div>
+</div>
+
+<div class="menu" id="menu-regions" data-menu-id="regions">
+  <div class="menu-section">
+    <div class="menu-heading">Select City</div>
+    <div id="region-list"></div>
+  </div>
+
+</div>
+
+<div class="menu" id="menu-criticality" data-menu-id="criticality">
+  <div class="menu-section">
+    <div class="menu-heading">Criticality Level</div>
+    <div id="criticality-list"></div>
+  </div>
+</div>
+
+<div class="menu" id="menu-status" data-menu-id="status">
+  <div class="menu-section">
+    <div class="menu-heading">Material Status</div>
+    <div id="status-list"></div>
+  </div>
+  <div class="menu-section">
+    <div class="menu-heading">Reorder Type</div>
+    <div id="reorder-list"></div>
+  </div>
+</div>
+
+<div class="menu" id="menu-config"></div>
+
+<main>
+  <!-- TABLE VIEW -->
+  <div class="table-view" id="table-view">
+    <div class="region-strip" id="region-strip" style="display:none">
+      <div>
+        <span class="region-strip-name" id="region-strip-name">—</span>
+        <span class="region-strip-code" id="region-strip-code"></span>
+      </div>
+      <div class="region-strip-stats" id="region-strip-stats"></div>
+    </div>
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-title" id="page-title">Materials</h1>
+        <div class="page-subtitle" id="page-subtitle">Showing <span id="visible-count">19</span> of <span id="total-count">19</span> materials</div>
+      </div>
+      <div class="page-actions">
+        <span id="cache-status" style="font-size:11px;color:var(--text-3);align-self:center;margin-right:4px"></span>
+        <button class="btn" id="refresh-data-btn" title="Reload latest data from the database">🔄 Refresh data</button>
+        <button class="btn">⬇ Export CSV</button>
+        <button class="btn" id="bulk-upload-btn" title="Upload many materials from the Excel template">⬆ Bulk Upload</button>
+        <button class="btn primary">+ Add Material</button>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <span class="filter-bar-label">Filters:</span>
+      <span id="chips"></span>
+      <span id="no-filters" class="filter-bar-empty">No filters applied — showing all materials</span>
+    </div>
+
+    <div class="kpi-strip" id="kpi-strip-table"></div>
+
+    <div class="data-card" style="overflow-x:auto">
+      <table style="min-width:1100px">
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div id="empty" class="empty-state" style="display:none">
+        No materials match your current filters.
+      </div>
+    </div>
+  </div>
+
+  <!-- ANALYTICS VIEW -->
+  <div class="analytics-view" id="analytics-view">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Analytics Dashboard</h1>
+        <div class="page-subtitle">Charts update live based on your filters</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn" id="reset-charts">↺ Reset Charts</button>
+        <button class="btn accent" id="add-chart-btn">+ New Chart</button>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <span class="filter-bar-label">Filters:</span>
+      <span id="chips-ana"></span>
+      <span id="no-filters-ana" class="filter-bar-empty">No filters applied — showing all materials</span>
+    </div>
+
+    <div class="kpi-strip" id="kpi-strip-ana"></div>
+    <div class="chart-grid" id="chart-grid"></div>
+  </div>
+
+<div class="modal-backdrop" id="add-modal">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-hd-title">Add new record</div>
+      <button class="modal-close" id="modal-close-btn">×</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="mtab active" data-mtab="material">Material</button>
+      <button class="mtab" data-mtab="vm_params">VM Classification</button>
+      <button class="mtab" data-mtab="vendor">Vendor</button>
+      <button class="mtab" data-mtab="consumption">Consumption 2025</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-ft">
+      <button class="btn" id="modal-cancel">Cancel</button>
+      <button class="btn primary" id="modal-save">Save to database</button>
+    </div>
+  </div>
+</div>
+
+
+  <!-- REGION DASHBOARD VIEW -->
+  <div class="region-view" id="region-view">
+    <div class="rdash-header" id="rdash-header">
+      <button class="rdash-back" id="rdash-back">← All Materials</button>
+      <div>
+        <div class="rdash-title" id="rdash-title">Bangalore</div>
+        <div class="rdash-subtitle" id="rdash-subtitle">Regional Materials Dashboard</div>
+      </div>
+      <div class="rdash-stats" id="rdash-stats"></div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="rdash-summary-grid" id="rdash-kpis"></div>
+
+    <!-- Sub-tabs -->
+    <div class="rdash-subtabs">
+      <button class="rdash-subtab active" data-rtab="overview">Overview</button>
+      <button class="rdash-subtab" data-rtab="category">Category Summary</button>
+      <button class="rdash-subtab" data-rtab="reorder">Reorder Type</button>
+      <button class="rdash-subtab" data-rtab="priority">Criticality Breakdown</button>
+      <button class="rdash-subtab alert" data-rtab="lowstock">Low Stock Alert<span class="badge" id="lowstock-badge">0</span></button>
+      <button class="rdash-subtab" data-rtab="items">Line Items</button>
+    </div>
+
+    <!-- Panel: Overview (comprehensive table) -->
+    <div class="rdash-panel active" id="rpanel-overview">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="font-size:15px;font-weight:600;color:var(--navy);margin-bottom:2px">All Materials Overview</h3>
+          <div style="font-size:12px;color:var(--text-3)" id="overview-count">— items</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="overview-search" placeholder="Filter by SKU or description..." style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font:inherit;font-size:13px;width:280px;outline:none;background:var(--bg);color:var(--text)" onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'">
+          <button class="btn" id="overview-export">⬇ Export CSV</button>
+        </div>
+      </div>
+      <div class="data-card" style="overflow-x:auto;max-height:70vh;overflow-y:auto">
+        <table class="pivot-table" id="overview-table" style="font-size:12.5px">
+          <thead style="position:sticky;top:0;z-index:5"><tr>
+            <th style="width:100px">SKU</th>
+            <th>Description</th>
+            <th style="width:70px">UOM</th>
+            <th style="width:130px">Category</th>
+            <th style="width:110px">Cities</th>
+            <th style="width:90px">Criticality</th>
+            <th class="num" style="width:80px">Stock</th>
+            <th class="num" style="width:90px">Cons/Month</th>
+            <th style="width:120px">Reorder Type</th>
+            <th class="num" style="width:80px">Min Qty</th>
+            <th class="num" style="width:80px">Max Qty</th>
+            <th class="num" style="width:70px">Lead Time</th>
+          </tr></thead>
+          <tbody id="overview-tbody"></tbody>
+        </table>
+        <div id="overview-empty" class="empty-state" style="display:none">No materials match the filter.</div>
+      </div>
+    </div>
+
+    <!-- Panel: Category Summary -->
+    <div class="rdash-panel" id="rpanel-category">
+      <table class="pivot-table" id="cat-summary-table"></table>
+    </div>
+
+    <!-- Panel: Reorder Type Summary -->
+    <div class="rdash-panel" id="rpanel-reorder">
+      <table class="pivot-table" id="reorder-summary-table"></table>
+    </div>
+
+    <!-- Panel: Priority Breakdown -->
+    <div class="rdash-panel" id="rpanel-priority">
+      <table class="pivot-table" id="priority-summary-table"></table>
+    </div>
+
+    <!-- Panel: Low Stock Alert -->
+    <div class="rdash-panel" id="rpanel-lowstock">
+      <table class="pivot-table" id="lowstock-table"></table>
+      <div id="lowstock-empty" class="empty-state" style="display:none">No low stock alerts — all materials are at safe levels.</div>
+    </div>
+
+    <!-- Panel: Line Items -->
+    <div class="rdash-panel" id="rpanel-items">
+      <div class="data-card">
+        <table>
+          <thead><tr>
+            <th style="width:110px">SKU</th>
+            <th>Description</th>
+            <th style="width:160px">Vendor</th>
+            <th class="num" style="width:90px">Lead Time</th>
+            <th style="width:140px">Reorder Type</th>
+            <th class="num" style="width:110px">3-Mo Cons.</th>
+            <th style="width:100px">Criticality</th>
+            <th class="num" style="width:90px">Stock</th>
+          </tr></thead>
+          <tbody id="rdash-tbody"></tbody>
+        </table>
+        <div id="rdash-empty" class="empty-state" style="display:none">No materials found for this region.</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+
+<script>
+let DATA = [];
+
+const REGIONS=[{key:"BLR",name:"Bangalore",flag:"blr",label:"B"},{key:"CHN",name:"Chennai",flag:"chn",label:"C"},{key:"HYD",name:"Hyderabad",flag:"hyd",label:"H"},{key:"PUN",name:"Pune",flag:"pun",label:"P"},{key:"NCR",name:"Delhi NCR",flag:"ncr",label:"D"}];
+const CRIT_ORDER=[{key:"V.High",label:"Very High",cls:"vhigh",note:"CRITICAL"},{key:"High",label:"High",cls:"high",note:"PRIORITY"},{key:"Med",label:"Medium",cls:"med",note:"STANDARD"},{key:"Low",label:"Low",cls:"low",note:"NON-CRITICAL"}];
+const state={search:"",major:null,category:null,region:null,criticality:null,status:"Active",reorder:null,view:"table"};
+
+function isDiscontinued(r){return r.blr==="Discontinued"}
+function activeCityCount(r){if(isDiscontinued(r))return 0;return REGIONS.filter(c=>r[c.flag]&&r[c.flag]!=="Discontinued").length}
+function isSpecificRegion(){return state.region&&!["all","multi","single"].includes(state.region)}
+function fmtPrice(v){if(v==null)return"—";if(v<1)return"₹"+v.toFixed(3);if(v<100)return"₹"+v.toFixed(2);if(v>=100000)return"₹"+(v/100000).toFixed(1)+"L";return"₹"+Math.round(v).toLocaleString("en-IN")}
+function fmtNum(v){if(v==null)return"—";if(typeof v!=="number")return v;return Math.round(v).toLocaleString("en-IN")}
+function fmtConsumption(v){if(v==null)return"—";if(v===0)return"0";if(Math.abs(v)<1)return v.toFixed(2);if(Math.abs(v)<10)return v.toFixed(1);return Math.round(v).toLocaleString("en-IN")}
+function critPill(c){const m=CRIT_ORDER.find(x=>x.key===c);return m?`<span class="pill ${m.cls}">${m.label}</span>`:""}
+function vendorCell(vendor,alt){if(!vendor)return`<span style="color:var(--text-4);font-style:italic">—</span>`;if(vendor==="CS")return`<span class="cs-tag">CS</span>${alt?`<span class="alt">${alt}</span>`:""}`;return`${vendor}${alt?`<span class="alt">${alt}</span>`:""}`}
+
+function populateMenus(){
+  const byMajor={};
+  DATA.forEach(r=>{if(!byMajor[r.major_category])byMajor[r.major_category]=new Set();byMajor[r.major_category].add(r.category)});
+  document.querySelectorAll("[data-major-list]").forEach(el=>{
+    const major=el.dataset.majorList;
+    const cats=Array.from(byMajor[major]||[]).sort();
+    const all=`<button class="menu-item" data-action="major" data-value="${major}"><span>All ${major}</span><span class="count">${DATA.filter(r=>r.major_category===major).length}</span></button>`;
+    const subs=cats.map(c=>{const n=DATA.filter(r=>r.category===c).length;return`<button class="menu-item" data-action="category" data-value="${c}"><span>${c}</span><span class="count">${n}</span></button>`}).join("");
+    el.innerHTML=all+subs;
+  });
+  document.getElementById("region-list").innerHTML=REGIONS.map(r=>`<button class="menu-item" data-action="region" data-value="${r.key}"><span>${r.name}</span><span class="count">${r.key}</span></button>`).join("");
+  document.getElementById("criticality-list").innerHTML=CRIT_ORDER.map(c=>{const n=DATA.filter(d=>d.criticality===c.key).length;return`<button class="menu-item" data-action="criticality" data-value="${c.key}"><span>${c.label}</span><span class="count">${c.note} · ${n}</span></button>`}).join("");
+  const nA=DATA.filter(d=>!isDiscontinued(d)).length,nD=DATA.filter(d=>isDiscontinued(d)).length;
+  const nB=DATA.filter(d=>!d.str_reorder_type).length;
+  document.getElementById("status-list").innerHTML=`
+    <button class="menu-item selected" data-action="status" data-value="Active"><span>Active only</span><span class="count">${nA}</span></button>
+    <button class="menu-item" data-action="status" data-value="all"><span>Show all</span><span class="count">${DATA.length}</span></button>
+    <button class="menu-item" data-action="status" data-value="Discontinued"><span>Discontinued only</span><span class="count">${nD}</span></button>
+    <button class="menu-item" data-action="status" data-value="Blank"><span>No reorder type (blank)</span><span class="count">${nB}</span></button>`;
+  const allVals=DATA.flatMap(r=>[r.regions?.BLR?.str_reorder,r.regions?.CHN?.str_reorder,r.regions?.HYD?.str_reorder,r.regions?.NCR?.str_reorder,r.regions?.PUN?.str_reorder,r.str_reorder_type]).filter(Boolean);
+  const reorderTypes=[...new Set(allVals)].sort();
+  document.getElementById("reorder-list").innerHTML=reorderTypes.map(t=>{
+    const n=DATA.filter(d=>{const vals=[d.regions?.BLR?.str_reorder,d.regions?.CHN?.str_reorder,d.regions?.HYD?.str_reorder,d.regions?.NCR?.str_reorder,d.regions?.PUN?.str_reorder,d.str_reorder_type];return vals.some(v=>v===t);}).length;
+    return`<button class="menu-item" data-action="reorder" data-value="${t}"><span>${reorderPill(t)}</span><span class="count">${n}</span></button>`;
+  }).join('');
+}
+
+function applyFilters(){
+  return DATA.filter(r=>{
+    if(state.search){const q=state.search.toLowerCase();if(!r.sku.toLowerCase().includes(q)&&!r.description.toLowerCase().includes(q))return false}
+    if(state.major&&r.major_category!==state.major)return false;
+    if(state.category&&r.category!==state.category)return false;
+    if(state.region){
+      if(state.region==="multi"){if(activeCityCount(r)<3)return false}
+      else if(state.region==="single"){if(activeCityCount(r)!==1)return false}
+      else if(state.region==="all"){if(activeCityCount(r)!==5)return false}
+      else{const reg=REGIONS.find(x=>x.key===state.region);if(!reg)return false;if(!r[reg.flag]||r[reg.flag]==="Discontinued")return false}
+    }
+    if(state.criticality&&r.criticality!==state.criticality)return false;
+    if(state.reorder){
+      const allReorders=[r.regions?.BLR?.str_reorder,r.regions?.CHN?.str_reorder,r.regions?.HYD?.str_reorder,r.regions?.NCR?.str_reorder,r.regions?.PUN?.str_reorder,r.str_reorder_type];
+      if(!allReorders.some(v=>v===state.reorder))return false;
+    }
+    if(state.status&&state.status!=="all"){
+      const _rv=r.str_reorder_type;
+      const _rvStr = _rv ? String(_rv).trim() : '';
+      const _hasR = _rvStr !== "" && _rvStr !== "null";
+      const _isDiscReorder = _rvStr.toLowerCase().includes("discontinu");
+      const _searchActive = state.search && state.search.length > 0;
+      
+      // When user is actively searching, show all matches regardless of status
+      if (!_searchActive) {
+        if(state.status==="Active"&&(isDiscontinued(r)||!_hasR||_isDiscReorder))return false;
+        if(state.status==="Discontinued"&&!isDiscontinued(r)&&!_isDiscReorder)return false;
+        if(state.status==="Blank"&&_hasR)return false;
+      }
+    }
+    return true;
+  });
+}
+
+function renderHead(){
+  const thead=document.getElementById("thead");
+  if(isSpecificRegion()){
+    thead.innerHTML=`<tr><th style="width:110px">SKU</th><th>Description</th><th style="width:160px">Vendor</th><th class="num" style="width:90px">Lead Time</th><th style="width:140px">Reorder Type</th><th class="num" style="width:120px">3-Mo Cons.</th><th style="width:100px">Criticality</th><th class="num" style="width:90px">Stock</th></tr>`;
+  }else{
+    thead.innerHTML=`<tr><th style="width:100px">SKU</th><th>Description</th><th style="width:150px">Category</th><th style="width:120px">Cities</th><th style="width:85px">Criticality</th><th class="num" style="width:80px">Stock</th><th class="num" style="width:110px">Cons. / Month</th><th style="width:120px">Reorder Type</th><th class="num" style="width:120px">Stock After Adjusted</th><th style="width:90px"></th></tr>`;
+  }
+}
+
+function regionMatrixHTML(r){
+  return`<div class="region-matrix">${REGIONS.map(reg=>{
+    const info=r.regions[reg.key]||{};
+    const presence=r[reg.flag];
+    const isOn=presence&&presence!=="Discontinued";
+    const isDisc=presence==="Discontinued";
+    return`<div class="region-col ${isOn?"":"inactive"}">
+      <div class="region-col-head">
+        <div class="region-col-name">${reg.name}</div>
+        <div class="region-col-flag ${isOn?"flag-on":isDisc?"flag-disc":""}">${isOn?"Stocked":isDisc?"Discontinued":"Not stocked"}</div>
+      </div>
+      <dl>
+        <div><dt>Vendor</dt><dd ${!info.vendor?'class="empty"':""}>${info.vendor==="CS"?'<span class="cs-tag">CS</span>':(info.vendor||"Not assigned")}</dd></div>
+        <div><dt>Vendor 2</dt><dd ${!info.vendor_alt?'class="empty"':""}>${info.vendor_alt||"—"}</dd></div>
+        <div><dt>Lead Time</dt><dd ${info.lead_time==null?'class="empty"':""}>${info.lead_time!=null?`<span class="num-val">${info.lead_time}</span> days`:"—"}</dd></div>
+        <div><dt>Reorder Type</dt><dd>${reorderPill(info.str_reorder)}</dd></div>
+        <div><dt>Order Frequency</dt><dd ${info.ordering_frequency==null?'class="empty"':""}>${info.ordering_frequency!=null?`every <span class="num-val">${info.ordering_frequency}</span> days`:"—"}</dd></div>
+        ${reg.key==="BLR"?`<div><dt>HUB Capacity</dt><dd ${r.blr_hub_capacity==null?'class="empty"':""}>${r.blr_hub_capacity!=null?fmtNum(r.blr_hub_capacity):"—"}</dd></div>`:""}
+      </dl>
+    </div>`;
+  }).join("")}</div>`;
+}
+
+function rowHTML(r,idx){
+  const status=isDiscontinued(r)?`<span class="pill disc">Discontinued</span>`:`<span class="pill active">Active</span>`;
+  const stockCls=r.closing_stock==null?"num muted":"num";
+  let cells;
+  if(isSpecificRegion()){
+    const info=r.regions[state.region]||{};
+    cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="vendor-cell">${vendorCell(info.vendor,info.vendor_alt)}</td><td class="${info.lead_time==null?"num muted":"num"}">${info.lead_time!=null?info.lead_time+' <span class="unit">d</span>':"—"}</td><td class="reorder-cell">${reorderPill(info.str_reorder)}${info.ordering_frequency!=null?`<span class="freq">every ${info.ordering_frequency}d</span>`:""}</td><td class="${info.consumption_3mo==null?"num muted":"num"}">${fmtConsumption(info.consumption_3mo)} ${info.consumption_3mo!=null&&r.uom?`<span class="unit">${r.uom}</span>`:""}</td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td>${reorderPill(info.str_reorder)}</td>`;
+  }else{
+    const cities=REGIONS.map(c=>{const v=r[c.flag];if(v==="Discontinued")return`<span class="city discon" title="Discontinued">${c.label}</span>`;if(v)return`<span class="city on" title="${c.name}">${c.label}</span>`;return`<span class="city" title="Not in ${c.name}">${c.label}</span>`}).join("");
+    const adjCls=r.adjusted_count==null?"num muted":"num";const adjBadge=r.adjustment&&r.adjustment!=0?`<span style="font-size:10px;color:var(--orange);display:block">${r.adjustment>0?"+":""}${r.adjustment}</span>`:"";cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="cat-cell"><span class="major">${r.major_category}</span>${r.category}</td><td><div class="cities">${cities}</div></td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td class="${r.consumption_month==null?"num muted":"num"}">${fmtConsumption(r.consumption_month)} ${r.consumption_month!=null&&r.uom?`<span class="unit">${r.uom}/mo</span>`:""}</td><td>${reorderPill(r.str_reorder_type)}</td><td class="${adjCls}">${r.adjusted_count!=null?fmtNum(r.adjusted_count):"—"}${adjBadge}</td><td><button onclick="event.stopPropagation();openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">Adjust</button></td>`;
+  }
+  const detailHTML=`
+    <div class="detail-section"><h5>Material Details</h5>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Classification</dt><dd>${r.classification} / ${r.type}</dd></div>
+      <div class="detail-item"><dt>Sub-Category</dt><dd>${r.category_desc}</dd></div>
+      <div class="detail-item"><dt>UOM</dt><dd>${r.uom||"—"}</dd></div>
+      <div class="detail-item"><dt>Supplier MOQ</dt><dd>${r.supplier_moq!=null?r.supplier_moq.toLocaleString("en-IN")+" "+(r.uom||""):"—"}</dd></div>
+      <div class="detail-item"><dt>Unit Price</dt><dd>${fmtPrice(r.unit_price)}</dd></div>
+      <div class="detail-item"><dt>Live Stock <span style="font-size:10px;color:var(--text-4)">from VM</span></dt><dd>${fmtNum(r.closing_stock)} ${r.uom||""}${r.synced_at?`<span style="display:block;font-size:10px;color:var(--text-4)">as of ${new Date(r.synced_at).toLocaleString()}</span>`:""}</dd></div>
+      <div class="detail-item"><dt>Adjustment</dt><dd style="color:var(--orange);font-weight:600">${r.adjustment>0?"+":""}${r.adjustment||0}</dd></div>
+      <div class="detail-item"><dt>Adjusted Count</dt><dd style="color:var(--green);font-weight:700">${r.adjusted_count!=null?fmtNum(r.adjusted_count):"—"} ${r.uom||""}</dd></div>
+      <div class="detail-item"><dt>Category Manager</dt><dd>${r.cat_manager||"—"}</dd></div>
+      <div class="detail-item"><dt>Season</dt><dd>${r.season||"—"}</dd></div>
+      <div class="detail-item"><dt>Seasonal Consumption</dt><dd>${r.seasonal_consumption!=null?fmtNum(r.seasonal_consumption):"—"}</dd></div>
+      <div class="detail-item"><dt>Launch Start Date</dt><dd>${r.launch_start||"—"}</dd></div>
+      <div class="detail-item"><dt>Launch End Date</dt><dd>${r.launch_end||"—"}</dd></div>
+      <div class="detail-item"><dt>Ratelist Name</dt><dd>${r.ratelist_name||"—"}</dd></div>
+      <div class="detail-item"><dt>Distrbn MOQ</dt><dd>${r.min_distrbn_qty!=null?fmtNum(r.min_distrbn_qty):"—"}</dd></div>
+    </dl>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button onclick="openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Adjust Stock</button>
+      <button onclick="openEditModal('${r.sku}')" style="background:var(--surface-2);color:var(--navy);border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Edit Item</button>
+    </div></div>
+    <div class="detail-section"><h5>Stock Parameters</h5>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Consumption / Month</dt><dd>${fmtConsumption(r.consumption_month)} ${r.uom||""}</dd></div>
+      <div class="detail-item"><dt>Consumption Value <span style="color:var(--orange);font-size:10px">calc</span></dt><dd>${(r.consumption_month!=null&&r.unit_price!=null)?fmtPrice(r.consumption_month*r.unit_price):"—"} <span style="font-size:11px;color:var(--text-4)">(Cons × Unit Price)</span></dd></div>
+      <div class="detail-item"><dt>Buffer for Lead Time <span style="color:var(--orange);font-size:10px">calc</span></dt><dd>${(r.consumption_month!=null&&r._blr_lead!=null)?fmtNum(r.consumption_month*r._blr_lead/30):"—"} <span style="font-size:11px;color:var(--text-4)">(Cons × BLR Lead ÷ 30)</span></dd></div>
+      <div class="detail-item"><dt>Min Qty</dt><dd>${fmtNum(r.min_qty)} ${r.uom||""}</dd></div>
+      <div class="detail-item"><dt>Max Qty</dt><dd>${fmtNum(r.max_qty)} ${r.uom||""}</dd></div>
+      <div class="detail-item"><dt>Min Value <span style="color:var(--orange);font-size:10px">calc</span></dt><dd>${(r.min_qty!=null&&r.unit_price!=null)?fmtPrice(r.min_qty*r.unit_price):"—"} <span style="font-size:11px;color:var(--text-4)">(Min Qty × Unit Price)</span></dd></div>
+      <div class="detail-item"><dt>Max Value <span style="color:var(--orange);font-size:10px">calc</span></dt><dd>${(r.max_qty!=null&&r.unit_price!=null)?fmtPrice(r.max_qty*r.unit_price):"—"} <span style="font-size:11px;color:var(--text-4)">(Max Qty × Unit Price)</span></dd></div>
+      <div class="detail-item"><dt>Ord Frequency</dt><dd>${r._ord_freq||30} days</dd></div>
+      <div class="detail-item"><dt>Uncertainty Buffer (Min)</dt><dd>${r._buf_min!=null?(r._buf_min*100).toFixed(0)+"%":"—"} <span style="font-size:11px;color:var(--text-4)">from VenMstr</span></dd></div>
+      <div class="detail-item"><dt>Uncertainty Buffer (Max)</dt><dd>${r._buf_max!=null?(r._buf_max*100).toFixed(0)+"%":"—"} <span style="font-size:11px;color:var(--text-4)">from VenMstr</span></dd></div>
+    </dl></div>
+    <div class="detail-section"><h5>Regional Breakdown</h5>${regionMatrixHTML(r)}</div>`;
+  return`<tr data-idx="${idx}">${cells}</tr><tr class="detail-row" data-idx-detail="${idx}" style="display:none"><td colspan="10">${detailHTML}</td></tr>`;
+}
+
+function renderRegionStrip(){
+  const strip=document.getElementById("region-strip");
+  if(!isSpecificRegion()){strip.style.display="none";return}
+  const reg=REGIONS.find(x=>x.key===state.region);if(!reg)return;
+  const list=applyFilters();
+  const totalConsumption=list.reduce((s,r)=>{const c=r.regions[reg.key]?.consumption_3mo;return s+(c!=null&&c>0?c:0)},0);
+  const vendorSet=new Set();list.forEach(r=>{const v=r.regions[reg.key]?.vendor;if(v&&v!=="CS")vendorSet.add(v)});
+  const leads=list.map(r=>r.regions[reg.key]?.lead_time).filter(x=>x!=null);
+  const avgLead=leads.length?Math.round(leads.reduce((a,b)=>a+b,0)/leads.length):null;
+  document.getElementById("region-strip-name").textContent=reg.name;
+  document.getElementById("region-strip-code").textContent=reg.key;
+  document.getElementById("region-strip-stats").innerHTML=`<div><div class="rss-label">Items</div><div class="rss-val"><em>${list.length}</em></div></div><div><div class="rss-label">Vendors</div><div class="rss-val">${vendorSet.size}</div></div><div><div class="rss-label">Avg Lead</div><div class="rss-val">${avgLead!=null?avgLead+' <span style="font-size:12px;color:rgba(255,255,255,.6)">days</span>':"—"}</div></div><div><div class="rss-label">3-Mo Cons.</div><div class="rss-val">${fmtConsumption(totalConsumption)}</div></div>`;
+  strip.style.display="flex";
+}
+
+function renderKPIs(targetId,rows){
+  const total=rows.length,active=rows.filter(r=>!isDiscontinued(r)).length;
+  const stockValue=rows.reduce((s,r)=>s+((r.closing_stock||0)*(r.unit_price||0)),0);
+  const totalCons=rows.reduce((s,r)=>s+(r.consumption_month||0),0);
+  const pct=total>0?Math.round((active/total)*100):0;
+  document.getElementById(targetId).innerHTML=`
+    <div class="kpi-card"><div class="kpi-label">Total Materials</div><div class="kpi-value">${total}</div><div class="kpi-sub">across ${REGIONS.length} regions</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Active SKUs</div><div class="kpi-value">${active}<span class="small"> / ${total}</span></div><div class="kpi-sub">${pct}% currently live</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Stock Value</div><div class="kpi-value">${fmtPrice(stockValue)}</div><div class="kpi-sub">closing inventory</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Monthly Consumption</div><div class="kpi-value">${fmtConsumption(totalCons)}</div><div class="kpi-sub">total units / month</div></div>`;
+}
+
+// Priority ranking: Criticality -> key Reorder Type -> Cities count
+const _CRIT_RANK = { 'V.High':0, 'High':1, 'Med':2, 'Low':3 };
+const _KEY_REORDER = ['Hub/Req','Hub/Reorder','Str/Req','Str/Reorder'];
+function _priorityRank(r){
+  const crit = _CRIT_RANK[r.criticality] != null ? _CRIT_RANK[r.criticality] : 9;
+  const isKey = _KEY_REORDER.includes(r.str_reorder_type) ? 0 : 1;
+  // cities count: how many of B/C/H/P/D are present
+  let cityCount = 0;
+  ['blr','chn','hyd','pun','ncr'].forEach(k => { const v=r[k]; if(v && v!=='Discontinued') cityCount++; });
+  return { crit, isKey, cityNeg: -cityCount };
+}
+function _prioritySort(list){
+  return list.slice().sort((a,b)=>{
+    const ra=_priorityRank(a), rb=_priorityRank(b);
+    if(ra.crit!==rb.crit) return ra.crit-rb.crit;          // V.High first
+    if(ra.isKey!==rb.isKey) return ra.isKey-rb.isKey;      // key reorder types next
+    if(ra.cityNeg!==rb.cityNeg) return ra.cityNeg-rb.cityNeg; // more cities first
+    return (a.sku||'').localeCompare(b.sku||'');           // stable tiebreak
+  });
+}
+
+function renderTable(){
+  renderHead();
+  const list=_prioritySort(applyFilters());
+  document.getElementById("visible-count").textContent=list.length;
+  document.getElementById("total-count").textContent=DATA.length;
+  document.getElementById("page-title").textContent=isSpecificRegion()?(REGIONS.find(x=>x.key===state.region).name+" — Materials"):"Materials";
+  const tbody=document.getElementById("tbody");
+  if(list.length===0){tbody.innerHTML="";document.getElementById("empty").style.display="block"}
+  else{document.getElementById("empty").style.display="none";tbody.innerHTML=list.map(r=>rowHTML(r,DATA.indexOf(r))).join("")}
+  renderChips("chips","no-filters");renderRegionStrip();renderKPIs("kpi-strip-table",list);
+}
+
+function renderChips(targetId,emptyId){
+  const el=document.getElementById(targetId),noFilters=document.getElementById(emptyId);
+  const items=[];
+  if(state.search)items.push({type:"search",label:`"${state.search}"`,isRegion:false});
+  if(state.major)items.push({type:"major",label:state.major,isRegion:false});
+  if(state.category)items.push({type:"category",label:state.category,isRegion:false});
+  if(state.region){let l=state.region;if(state.region==="multi")l="Multi-City";else if(state.region==="single")l="Single-City";else if(state.region==="all")l="All Cities";else{const reg=REGIONS.find(x=>x.key===state.region);l=reg?reg.name:state.region}items.push({type:"region",label:l,isRegion:isSpecificRegion()})}
+  if(state.criticality){const m=CRIT_ORDER.find(x=>x.key===state.criticality);items.push({type:"criticality",label:m?m.label:state.criticality,isRegion:false})}
+  if(state.status&&state.status!=="Active")items.push({type:"status",label:state.status==="all"?"Showing all":state.status==="Blank"?"Blank reorder type":state.status,isRegion:false});
+  if(state.reorder)items.push({type:"reorder",label:state.reorder,isRegion:false});
+  if(items.length===0){el.innerHTML="";noFilters.style.display="inline";return}
+  noFilters.style.display="none";
+  el.innerHTML=items.map(i=>`<span class="filter-chip${i.isRegion?" region":""}">${i.label}<button class="x" data-clear="${i.type}">×</button></span>`).join("")+`<button class="clear-link" data-action="clear-all">Clear all filters</button>`;
+}
+
+function syncTabs(){
+  document.querySelectorAll("#tabs .tab").forEach(t=>t.classList.remove("active"));
+  if(state.view==="analytics"){document.querySelector('[data-tab="analytics"]').classList.add("active");return}
+  if(state.major||state.category)document.querySelector('[data-menu="categories"]').classList.add("active");
+  else if(state.region)document.querySelector('[data-menu="regions"]').classList.add("active");
+  else if(state.criticality)document.querySelector('[data-menu="criticality"]').classList.add("active");
+  else if(state.status)document.querySelector('[data-menu="status"]').classList.add("active");
+  else document.querySelector('[data-tab="all"]').classList.add("active");
+}
+
+function switchView(v){
+  state.view=v;
+  document.getElementById("table-view").classList.toggle("hidden",v==="analytics");
+  document.getElementById("analytics-view").classList.toggle("active",v==="analytics");
+  syncTabs();
+  if(v==="analytics")renderAnalytics();else renderTable();
+}
+
+let openMenuId=null;
+function closeAllMenus(){document.querySelectorAll(".menu.open").forEach(m=>m.classList.remove("open"));document.querySelectorAll('.tab[aria-expanded="true"]').forEach(t=>t.setAttribute("aria-expanded","false"));openMenuId=null}
+function openMenu(menuId,anchorEl){
+  closeAllMenus();
+  const menu=document.getElementById("menu-"+menuId);if(!menu)return;
+  const r=anchorEl.getBoundingClientRect();
+  menu.classList.add("open");
+  let left=r.left,top=r.bottom+4;
+  const mr=menu.getBoundingClientRect();
+  if(left+mr.width>window.innerWidth-12)left=window.innerWidth-mr.width-12;
+  if(left<12)left=12;
+  menu.style.left=left+"px";menu.style.top=top+"px";
+  anchorEl.setAttribute("aria-expanded","true");openMenuId=menuId;
+}
+
+document.body.addEventListener("click",(e)=>{
+  const tab=e.target.closest('.tab[data-menu]');
+  if(tab){const id=tab.dataset.menu;if(openMenuId===id)closeAllMenus();else openMenu(id,tab);return}
+  const directTab=e.target.closest('.tab[data-tab]');
+  if(directTab){
+    closeAllMenus();
+    if(directTab.dataset.tab==="all"){Object.keys(state).forEach(k=>{if(k!=="view")state[k]=(k==="search")?"":null});document.getElementById("search").value="";switchView("table")}
+    else if(directTab.dataset.tab==="analytics")switchView("analytics");
+    return;
+  }
+  const item=e.target.closest('.menu-item[data-action]');
+  if(item){
+    const action=item.dataset.action,value=item.dataset.value;
+    if(action==="major"){state.major=value;state.category=null}
+    else if(action==="category"){state.category=value;const r=DATA.find(d=>d.category===value);if(r)state.major=r.major_category}
+    else if(action==="region"){
+      closeAllMenus();
+      showRegionDashboard(value);
+      return;
+    }
+    else if(action==="criticality")state.criticality=value;
+    else if(action==="status"){
+      state.status=value;
+      document.querySelectorAll('#menu-status .menu-item[data-action="status"]').forEach(el=>el.classList.toggle('selected',el.dataset.value===value));
+    }
+    else if(action==="reorder")state.reorder=value;
+    closeAllMenus();switchView("table");return;
+  }
+  const x=e.target.closest("[data-clear]");
+  if(x){
+    const t=x.dataset.clear;
+    if(t==="search"){state.search="";document.getElementById("search").value=""}
+    else if(t==="major"){state.major=null;state.category=null}
+    else state[t]=null;
+    syncTabs();if(state.view==="analytics")renderAnalytics();else renderTable();return;
+  }
+  if(e.target.closest('[data-action="clear-all"]')){Object.keys(state).forEach(k=>{if(k!=="view")state[k]=(k==="search")?"":null});document.getElementById("search").value="";syncTabs();if(state.view==="analytics")renderAnalytics();else renderTable();return}
+  const row=e.target.closest("tbody tr[data-idx]");
+  if(row){const idx=row.dataset.idx,detail=document.querySelector(`[data-idx-detail="${idx}"]`);if(detail){const open=detail.style.display==="table-row";detail.style.display=open?"none":"table-row";row.classList.toggle("expanded",!open)}return}
+  const pill=e.target.closest(".config-pill");if(pill){e.stopPropagation();handleChartConfig(pill);return}
+  const del=e.target.closest('[data-action="delete-chart"]');
+  if(del){const id=parseInt(del.closest(".chart-card").dataset.id);charts=charts.filter(c=>c.id!==id);renderAnalytics();return}
+  if(e.target.closest("#add-chart")||e.target.id==="add-chart-btn"){chartIdCounter++;charts.push({id:chartIdCounter,title:"New Chart",dim:"major_category",measure:"count",type:"bar",wide:false});renderAnalytics();return}
+  if(e.target.id==="reset-charts"){charts=JSON.parse(JSON.stringify(DEFAULT_CHARTS));chartIdCounter=DEFAULT_CHARTS.length;renderAnalytics();return}
+  if(!e.target.closest(".menu")&&!e.target.closest(".tab")&&!e.target.closest(".config-pill"))closeAllMenus();
+});
+
+document.getElementById("search").addEventListener("input",e=>{state.search=e.target.value.trim();if(state.view==="analytics")renderAnalytics();else renderTable()});
+document.addEventListener("keydown",e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==="k"){e.preventDefault();document.getElementById("search").focus();document.getElementById("search").select()}
+  if(e.key==="Escape"){closeAllMenus();document.getElementById("search").value="";state.search="";if(state.view==="analytics")renderAnalytics();else renderTable()}
+});
+document.body.addEventListener("input",e=>{const t=e.target.closest('.chart-title[contenteditable="true"]');if(t){const id=parseInt(t.closest(".chart-card").dataset.id);const chart=charts.find(c=>c.id===id);if(chart)chart.title=t.textContent.trim()||"Untitled"}});
+
+// ===== ANALYTICS =====
+const DIMENSIONS=[{key:"major_category",label:"Major Category"},{key:"category",label:"Sub-Category"},{key:"region",label:"Region"},{key:"criticality",label:"Criticality"},{key:"status",label:"Status"},{key:"vendor",label:"Vendor (BLR)"},{key:"reorder_type",label:"Reorder Type"},{key:"sku_top10",label:"Top 10 SKUs"}];
+const MEASURES=[{key:"count",label:"Item Count"},{key:"sum_stock",label:"Total Stock"},{key:"sum_consumption",label:"Monthly Consumption"},{key:"sum_stock_value",label:"Stock Value"},{key:"avg_unit_price",label:"Avg Unit Price"},{key:"avg_lead_time",label:"Avg Lead Time"}];
+const CHART_TYPES=[{key:"bar",label:"Bar Chart"},{key:"hbar",label:"Horizontal Bar"},{key:"donut",label:"Donut"},{key:"pie",label:"Pie Chart"}];
+const DEFAULT_CHARTS=[{id:1,title:"Items by Region",dim:"region",measure:"count",type:"bar",wide:false},{id:2,title:"Distribution by Criticality",dim:"criticality",measure:"count",type:"donut",wide:false},{id:3,title:"Top 10 SKUs by Consumption",dim:"sku_top10",measure:"sum_consumption",type:"hbar",wide:true},{id:4,title:"Stock Value by Category",dim:"major_category",measure:"sum_stock_value",type:"bar",wide:false},{id:5,title:"Items by Major Category",dim:"major_category",measure:"count",type:"donut",wide:false},{id:6,title:"Reorder Strategy Mix",dim:"reorder_type",measure:"count",type:"hbar",wide:true}];
+let charts=JSON.parse(JSON.stringify(DEFAULT_CHARTS));
+const chartInstances={};let chartIdCounter=DEFAULT_CHARTS.length;
+
+function bucketize(rows,dim){
+  const buckets={};
+  if(dim==="region"){REGIONS.forEach(r=>buckets[r.name]=rows.filter(d=>d[r.flag]&&d[r.flag]!=="Discontinued"));return buckets}
+  if(dim==="status"){buckets["Active"]=rows.filter(d=>!isDiscontinued(d));buckets["Discontinued"]=rows.filter(d=>isDiscontinued(d));return buckets}
+  if(dim==="vendor"){rows.forEach(r=>{const v=r.regions?.BLR?.vendor;if(v&&v!=="CS"){if(!buckets[v])buckets[v]=[];buckets[v].push(r)}});return buckets}
+  if(dim==="reorder_type"){rows.forEach(r=>{const v=r.regions?.BLR?.str_reorder||"Unspecified";if(!buckets[v])buckets[v]=[];buckets[v].push(r)});return buckets}
+  if(dim==="sku_top10")return rows.slice(0,10).reduce((acc,r)=>{acc[r.sku]=[r];return acc},{});
+  rows.forEach(r=>{const k=r[dim]||"—";if(!buckets[k])buckets[k]=[];buckets[k].push(r)});
+  return buckets;
+}
+function aggregate(items,measure){
+  if(measure==="count")return items.length;
+  if(measure==="sum_stock")return items.reduce((s,r)=>s+(r.closing_stock||0),0);
+  if(measure==="sum_consumption")return items.reduce((s,r)=>s+(r.consumption_month||0),0);
+  if(measure==="sum_stock_value")return items.reduce((s,r)=>s+((r.closing_stock||0)*(r.unit_price||0)),0);
+  if(measure==="avg_unit_price"){const v=items.map(r=>r.unit_price).filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0}
+  if(measure==="avg_lead_time"){const v=items.map(r=>r.regions?.BLR?.lead_time).filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0}
+  return 0;
+}
+
+const NAVY="#1B3560",NAVY2="#2A4F87",ORANGE="#F57224",ORANGE2="#FF8C45";
+const PALETTE=[NAVY,ORANGE,NAVY2,"#1D4ED8","#15803D","#7C3AED","#B45309","#B91C1C",ORANGE2,"#6B7280"];
+
+function chartConfig(cfg,rows){
+  const buckets=bucketize(rows,cfg.dim);
+  let entries=Object.entries(buckets).map(([label,items])=>[label,aggregate(items,cfg.measure)]);
+  if(cfg.dim==="sku_top10"||cfg.type==="hbar"||cfg.type==="bar")entries.sort((a,b)=>b[1]-a[1]);
+  if(cfg.dim==="sku_top10")entries=entries.slice(0,10);
+  const labels=entries.map(e=>e[0]),values=entries.map(e=>e[1]);
+  const isPie=cfg.type==="donut"||cfg.type==="pie";
+  const ds={label:MEASURES.find(m=>m.key===cfg.measure)?.label||cfg.measure,data:values,backgroundColor:isPie?PALETTE.slice(0,values.length):values.map((_,i)=>i===0?ORANGE:NAVY),borderColor:isPie?"#fff":NAVY,borderWidth:isPie?2:0,borderRadius:4};
+  const isHorizontal=cfg.type==="hbar";
+  const chartType=cfg.type==="donut"?"doughnut":cfg.type==="hbar"?"bar":cfg.type;
+  return{type:chartType,data:{labels,datasets:[ds]},options:{indexAxis:isHorizontal?"y":"x",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:isPie,position:"right",labels:{font:{family:"Inter",size:12},color:"#374151",boxWidth:12,padding:10}},tooltip:{backgroundColor:"#111827",titleColor:"#fff",bodyColor:"#F9FAFB",titleFont:{family:"Inter",weight:"600",size:13},bodyFont:{family:"JetBrains Mono",size:12},padding:10,cornerRadius:6,displayColors:false,callbacks:{label:(ctx)=>{const v=ctx.parsed.y??ctx.parsed.x??ctx.parsed;const measure=MEASURES.find(m=>m.key===cfg.measure);if(cfg.measure==="sum_stock_value"||cfg.measure==="avg_unit_price")return measure.label+": "+fmtPrice(v);return measure.label+": "+fmtNum(v)}}}},scales:isPie?{}:{x:{ticks:{font:{family:"JetBrains Mono",size:11},color:"#6B7280"},grid:{color:"#EEF0F4"}},y:{ticks:{font:{family:"JetBrains Mono",size:11},color:"#6B7280"},grid:{color:"#EEF0F4"}}}}};
+}
+
+function renderAnalytics(){
+  const rows=applyFilters();
+  renderKPIs("kpi-strip-ana",rows);renderChips("chips-ana","no-filters-ana");
+  const grid=document.getElementById("chart-grid");
+  Object.values(chartInstances).forEach(c=>c.destroy());Object.keys(chartInstances).forEach(k=>delete chartInstances[k]);
+  grid.innerHTML=charts.map(c=>{
+    const dimLabel=DIMENSIONS.find(d=>d.key===c.dim)?.label||c.dim;
+    const measureLabel=MEASURES.find(m=>m.key===c.measure)?.label||c.measure;
+    const typeLabel=CHART_TYPES.find(t=>t.key===c.type)?.label||c.type;
+    return`<div class="chart-card${c.wide?" wide":""}" data-id="${c.id}">
+      <div class="chart-head">
+        <div class="chart-title" contenteditable="true" data-field="title">${c.title}</div>
+        <div class="chart-config">
+          <button class="config-pill dim" data-cfg="dim">${dimLabel}</button>
+          <button class="config-pill measure" data-cfg="measure">${measureLabel}</button>
+          <button class="config-pill type" data-cfg="type">${typeLabel}</button>
+        </div>
+      </div>
+      <div class="chart-body"><canvas id="canvas-${c.id}"></canvas></div>
+      <div class="chart-foot"><span>${rows.length} items · grouped by ${dimLabel.toLowerCase()}</span><button class="delete-chart" data-action="delete-chart">Remove</button></div>
+    </div>`;
+  }).join("")+`<button class="add-chart" id="add-chart"><span class="plus">+</span><span>Add a new chart</span><small>Choose grouping, value, and chart type</small></button>`;
+  charts.forEach(c=>{const ctx=document.getElementById(`canvas-${c.id}`);if(ctx)chartInstances[c.id]=new Chart(ctx,chartConfig(c,rows))});
+  syncTabs();
+}
+
+function handleChartConfig(pillEl){
+  closeAllMenus();
+  const card=pillEl.closest(".chart-card"),id=parseInt(card.dataset.id),chart=charts.find(c=>c.id===id),cfg=pillEl.dataset.cfg;
+  let items,current;
+  if(cfg==="dim"){items=DIMENSIONS;current=chart.dim}
+  else if(cfg==="measure"){items=MEASURES;current=chart.measure}
+  else{items=CHART_TYPES;current=chart.type}
+  const cfgMenu=document.getElementById("menu-config");
+  cfgMenu.innerHTML=`<div class="menu-section"><div class="menu-heading">${cfg==="dim"?"Group by":cfg==="measure"?"Show value":"Chart type"}</div>${items.map(i=>`<button class="menu-item${i.key===current?" selected":""}" data-config-val="${i.key}"><span>${i.label}</span></button>`).join("")}</div>`;
+  const r=pillEl.getBoundingClientRect();
+  cfgMenu.classList.add("open");
+  let left=r.left,top=r.bottom+4;
+  const mr=cfgMenu.getBoundingClientRect();
+  if(left+mr.width>window.innerWidth-12)left=window.innerWidth-mr.width-12;
+  cfgMenu.style.left=left+"px";cfgMenu.style.top=top+"px";
+  openMenuId="config";
+  cfgMenu.onclick=(ev)=>{const item=ev.target.closest("[data-config-val]");if(item){chart[cfg]=item.dataset.configVal;closeAllMenus();renderAnalytics()}};
+}
+
+
+
+/* ══════════════════════════════════════════════════════════════
+   FIRESTORE DATA LAYER  (replaces Supabase)
+   All database access is isolated here. To migrate to AWS/local
+   later, swap only this section for API calls.
+   ══════════════════════════════════════════════════════════════ */
+
+// Firebase modular SDK is initialized in the <head> module script.
+// window._FS = Firestore instance (database "default"); window._fsApi = functions.
+// Read every document from a collection
+// ── DAILY CACHE ─────────────────────────────────────────────
+// Loads collections from Firestore once per day, caches in the browser.
+// Subsequent page loads cost ZERO Firestore reads until the cache expires
+// (next calendar day) or the user clicks "Refresh data".
+const CACHE_KEY = 'printo_mat_cache_v1';
+function _todayStr(){ return new Date().toISOString().slice(0,10); }
+function _loadCache(){
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (obj.date !== _todayStr()) return null;   // expired (new day)
+    return obj;
+  } catch(e){ return null; }
+}
+function _saveCache(payload){
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(Object.assign({date:_todayStr()}, payload))); }
+  catch(e){ console.warn('cache save failed (data still works this session):', e.message); }
+}
+function _clearCache(){ try{ localStorage.removeItem(CACHE_KEY); }catch(e){} }
+
+async function _fetchAll(collectionName) {
+  const { collection, getDocs } = window._fsApi;
+  const snap = await getDocs(collection(window._FS, collectionName));
+  const out = [];
+  snap.forEach(d => {
+    if (d.id === '_meta') return;            // skip seed marker
+    out.push(Object.assign({ _id: d.id }, d.data()));
+  });
+  return out;
+}
+
+/* Loading-bar progress helper */
+function _prog(pct, msg) {
+  const bar = document.getElementById('loading-bar');
+  const txt = document.getElementById('loading-text');
+  if (bar) bar.style.width = pct + '%';
+  if (txt) txt.textContent = msg;
+}
+
+/* ── Parse BLR vendor "Name-LeadTime" (e.g. "Canvera-3" -> {name:"Canvera", lead:3}) ── */
+function parseBlrVendor(val) {
+  if (!val) return { name: null, lead: null, raw: null };
+  const s = String(val).trim();
+  const m = s.match(/^(.*)-(\d+)$/);
+  if (m) return { name: m[1].trim(), lead: parseInt(m[2], 10), raw: s };
+  return { name: s, lead: null, raw: s };   // no -N suffix: keep name, blank lead
+}
+
+/* ── Adjusted count = live closing_stock + adjustment ── */
+function computeAdjusted(closing, adjustment) {
+  // Adjusted Count is BLANK until an adjustment is made.
+  // Once adjusted (+/-), it shows stock + adjustment.
+  const a = parseFloat(adjustment) || 0;
+  if (a === 0) return null;
+  const c = (closing === null || closing === undefined || closing === '') ? 0 : parseFloat(closing);
+  return c + a;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LOAD + BUILD  — joins all collections by SKU
+   ══════════════════════════════════════════════════════════════ */
+(async function _init() {
+  try {
+    // wait for the Firebase modular SDK (loaded as a module in <head>) to be ready
+    if (!window._FS) {
+      await new Promise(res => {
+        if (window._FS) return res();
+        window.addEventListener('firebase-ready', res, { once: true });
+        // safety timeout fallback
+        setTimeout(res, 8000);
+      });
+    }
+    if (!window._FS) throw new Error('Firebase did not initialize');
+
+    let mats, vms, cons, live, ubuf;
+    const cached = _loadCache();
+    if (cached) {
+      // Loaded from today's cache — NO Firestore reads
+      _prog(60, 'Loading from cache...');
+      mats = cached.mats; vms = cached.vms; cons = cached.cons; live = cached.live || []; ubuf = cached.ubuf || [];
+      console.log('[CACHE] Loaded from browser cache (0 Firestore reads). Cached on', cached.date);
+    } else {
+      _prog(20, 'Loading data...');
+      // Fetch all collections IN PARALLEL (much faster than one-by-one)
+      const results = await Promise.all([
+        _fetchAll('materials'),
+        _fetchAll('vm_classification'),
+        _fetchAll('consumption_2025'),
+        _fetchAll('live_stock').catch(e => { console.warn('live_stock not available:', e.message); return []; }),
+        _fetchAll('uncertainty_buffers').catch(e => { console.warn('uncertainty_buffers not available:', e.message); return []; })
+      ]);
+      _prog(75, 'Processing...');
+      mats = results[0]; vms = results[1]; cons = results[2]; live = results[3]; ubuf = results[4];
+      _saveCache({ mats, vms, cons, live, ubuf });
+      console.log('[CACHE] Fresh load from Firestore (parallel); cached for today.');
+    }
+
+    _prog(92, 'Building dashboard...');
+
+    const vmMap   = {};  vms.forEach(r  => vmMap[r.sku]   = r);
+    const cMap    = {};  cons.forEach(r => cMap[r.sku]    = r);
+    const liveMap = {};  live.forEach(r => liveMap[r._id] = r);   // live_stock keyed by SKU (doc id)
+    window._UBUF = {};  (ubuf||[]).forEach(r => { const k=r.help1||r._id; if(k) window._UBUF[k]=r; });  // uncertainty buffer lookup by Help1
+
+
+    DATA = mats.map(m => {
+      const vm   = vmMap[m.sku]   || {};
+      const c    = cMap[m.sku]    || {};
+      const ls   = liveMap[m.sku] || {};
+
+      // --- STOCK: from live_stock collection (NOT from materials) ---
+      const closingStock = (ls.closing_stock !== null && ls.closing_stock !== undefined)
+                            ? parseFloat(ls.closing_stock) : null;
+      const adjustment   = parseFloat(ls.adjustment) || 0;
+      const adjustedCount = computeAdjusted(closingStock, adjustment);
+      const syncedAt     = ls.synced_at || null;
+
+      // --- VENDORS / LEAD TIME ---
+      // BLR: combined "Name-LeadTime" — keep raw for display, parse lead time
+      const blrVendorRaw = m.blr_v1 || null;
+      const blrParsed    = parseBlrVendor(blrVendorRaw);
+
+      // --- consumption: keep both, prefer VM's consumption_per_month ---
+      const consumptionPerMonth = parseFloat(vm.consumption_per_month);
+      const consVm = parseFloat(c.vm_consumption);
+      const consumptionMonth = !isNaN(consumptionPerMonth) ? consumptionPerMonth
+                              : (!isNaN(consVm) ? consVm : 0);
+
+      // --- price / moq (editable, live per item) ---
+      const unitPrice = (m.unit_price !== null && m.unit_price !== undefined && m.unit_price !== '')
+                        ? parseFloat(m.unit_price)
+                        : (parseFloat(vm.avg_unit_price) || null);
+
+      // --- Min/Max: CALCULATED LIVE via the inventory formula ---
+      //   Min = CEILING( (N+J)/30 + R + N*S , L )
+      //   Max = CEILING( (N+J)/30*U + R + N*S , L )
+      //   N=consumption/month, J=seasonal consumption, R=buffer for lead time,
+      //   Smin=uncertainty(min from VenMstr), Smax=uncertainty(max from VenMstr),
+      //   U=ord freq, L=Distrbn MOQ. Uncertainty looked up by item's Helper key.
+      const _N = !isNaN(consumptionPerMonth) ? consumptionPerMonth : 0;
+      const _J = parseFloat(vm.seasonal_consumption) || 0;
+      const _R = parseFloat(vm.buffer_lead_time) || 0;
+      const _U = parseFloat(vm.ord_freq) || 0;
+      const _L = (m.min_distrbn_qty !== null && m.min_distrbn_qty !== undefined && m.min_distrbn_qty !== '')
+                  ? parseFloat(m.min_distrbn_qty) : null;
+      // Uncertainty buffers: look up by Helper from VenMstr (window._UBUF), fall back to vm fields
+      const _ub = (window._UBUF && vm.helper) ? window._UBUF[vm.helper] : null;
+      const _Smin = _ub && _ub.buffer_min != null ? parseFloat(_ub.buffer_min)
+                    : (parseFloat(vm.uncertainty_min) || 0);
+      const _Smax = _ub && _ub.buffer_max != null ? parseFloat(_ub.buffer_max)
+                    : (parseFloat(vm.uncertainty_max) || 0);
+      function _ceilMath(x, mult){
+        if (mult == null || isNaN(mult) || mult <= 0) return Math.ceil(x); // no MOQ → ceil to integer
+        return Math.ceil(x / mult) * mult;
+      }
+      // Only compute when we have the core driver (consumption); else leave null (shows —)
+      let minQty = null, maxQty = null;
+      const _haveInputs = !isNaN(consumptionPerMonth);
+      if (_haveInputs) {
+        const minRaw = ((_N + _J) / 30 + _R) + (_N * _Smin);
+        const maxRaw = ((_N + _J) / 30 * _U + _R) + (_N * _Smax);
+        minQty = (minRaw <= 0) ? 0 : _ceilMath(minRaw, _L);
+        maxQty = (maxRaw <= 0) ? 0 : _ceilMath(maxRaw, _L);
+      }
+
+      return {
+        sku: m.sku || '',
+        description: m.material_description || '',
+        uom: m.uom || '',
+        supplier_moq: m.supplier_moq,
+        criticality: m.criticality || '',
+        classification: m.classification || '',
+        type: m.type || '',
+        category_desc: m.material_category_desc || '',
+        category: m.category || '',
+        major_category: m.major_category || '',
+        cat_manager: m.cat_mgr || '',
+        season: m.season || '',
+        launch_start: m.launch_start || m.launch_dt || '',
+        launch_end: m.launch_end || '',
+        ratelist_name: m.ratelist_name || '',
+        blr_v2: m.blr_v2 || '',
+        ncr_v2: m.ncr_v2 || '',
+        chn_v2: m.chn_v2 || '',
+        blr_hub_capacity: (m.blr_hub_capacity!=null?m.blr_hub_capacity:null),
+        min_distrbn_qty: (m.min_distrbn_qty!=null?m.min_distrbn_qty:null),
+        seasonal_consumption: (vm.seasonal_consumption!=null?vm.seasonal_consumption:(m.seasonal_consumption!=null?m.seasonal_consumption:null)),
+        uncertainty_min: (vm.uncertainty_min!=null?vm.uncertainty_min:null),
+        uncertainty_max: (vm.uncertainty_max!=null?vm.uncertainty_max:null),
+        _buf_min: (_ub && _ub.buffer_min!=null) ? parseFloat(_ub.buffer_min) : (_Smin||null),
+        _buf_max: (_ub && _ub.buffer_max!=null) ? parseFloat(_ub.buffer_max) : (_Smax||null),
+        helper: (vm.helper||null),
+
+        // stock (from live_stock)
+        closing_stock: closingStock,
+        adjustment: adjustment,
+        adjusted_count: adjustedCount,
+        synced_at: syncedAt,
+
+        // price/moq
+        unit_price: unitPrice,
+
+        // city flags + combined
+        combined: m.combined || '',
+        blr: m.blr || null,
+        chn: m.chn || null,
+        hyd: m.hyd || null,
+        pun: m.pun || null,
+        ncr: m.ncr || null,
+        str_reorder_type: m.str_reorder_type || null,
+
+        // consumption (both kept)
+        consumption_month: consumptionMonth,
+        _consumption_per_month: isNaN(consumptionPerMonth) ? null : consumptionPerMonth,
+        _vm_consumption: isNaN(consVm) ? null : consVm,
+
+        // min/max as-is (human entered)
+        min_qty: minQty,
+        max_qty: maxQty,
+        min_val: vm.min_val != null ? parseFloat(vm.min_val) : null,
+        max_val: vm.max_val != null ? parseFloat(vm.max_val) : null,
+        cnsump_value: vm.cnsump_value != null ? parseFloat(vm.cnsump_value) : null,
+        buffer_lead_time: vm.buffer_lead_time != null ? parseFloat(vm.buffer_lead_time) : null,
+
+        // VM extras
+        _vendor: vm.vendor || null,
+        _matrl_categorization: vm.matrl_categorization || null,
+        _ord_freq: parseFloat(vm.ord_freq) || 30,
+
+        // BLR parsed vendor/lead
+        _blr_vendor_raw: blrVendorRaw,
+        _blr_vendor_name: blrParsed.name,
+        _blr_lead: blrParsed.lead,
+
+        // regions — mapped to v2 field names
+        regions: {
+          BLR: { vendor: blrVendorRaw, vendor_alt: m.blr_v2||null, lead_time: blrParsed.lead, str_reorder: m.str_reorder_type||null, ordering_frequency: (vm.ord_freq!=null&&vm.ord_freq!==''?parseFloat(vm.ord_freq):null), consumption_3mo: parseFloat(c.blr_3)||0 },
+          CHN: { vendor: m.chn_v1||null, vendor_alt: m.chn_v2||null, lead_time: m.chn_lead_time!=null?parseFloat(m.chn_lead_time):null, str_reorder: m.chn_str_reorder||null, ordering_frequency: m.chn_ordering_frequency||null, consumption_3mo: parseFloat(c.chn_3)||0 },
+          HYD: { vendor: m.hyd_v1||null, vendor_alt: null, lead_time: m.hyd_lead_time!=null?parseFloat(m.hyd_lead_time):null, str_reorder: m.hyd_str_reorder||null, ordering_frequency: m.hyd_ordering_frequency||null, consumption_3mo: parseFloat(c.hyd_3)||0 },
+          NCR: { vendor: m.ncr_v1||null, vendor_alt: m.ncr_v2||null, lead_time: m.ncr_lead_time!=null?parseFloat(m.ncr_lead_time):null, str_reorder: m.ncr_str_reorder||null, ordering_frequency: m.ncr_ordering_frequency||null, consumption_3mo: parseFloat(c.ncr_3)||0 },
+          PUN: { vendor: null, vendor_alt: null, lead_time: null, str_reorder: null, ordering_frequency: null, consumption_3mo: parseFloat(c.pun_3)||0 }
+        },
+        grand_total_consumption: parseFloat(c.grand_total) || 0
+      };
+    });
+
+    _prog(100, 'Ready!');
+    setTimeout(() => {
+      const ov = document.getElementById('loading-overlay');
+      if (ov) ov.classList.add('hidden');
+      populateMenus();
+      renderTable();
+    }, 350);
+
+  } catch(err) {
+    const txt = document.getElementById('loading-text');
+    if (txt) txt.textContent = 'Error: ' + err.message;
+    console.error('Firestore load error:', err);
+  }
+})();
+
+
+/* ══════════════════════════════════════════════════════════════
+   WRITE OPERATIONS  — adjustments + field edits (write to Firestore)
+   All writes isolated here for easy future migration.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Apply a stock adjustment:
+   - updates live_stock/{sku}: adjustment (running), adjusted_count
+   - appends to stock_adjustments log: {sku, amount, reason, at}
+   closing_stock is NEVER modified here. */
+async function applyAdjustment(sku, amount, reason) {
+  amount = parseFloat(amount);
+  if (isNaN(amount)) throw new Error('Adjustment amount must be a number');
+
+  const { doc, runTransaction, collection, addDoc } = window._fsApi;
+  const ref = doc(window._FS, 'live_stock', sku);
+  await runTransaction(window._FS, async (tx) => {
+    const snap = await tx.get(ref);
+    const cur  = snap.exists() ? snap.data() : {};
+    const closing = (cur.closing_stock != null) ? parseFloat(cur.closing_stock) : null;
+    const newAdj  = (parseFloat(cur.adjustment) || 0) + amount;
+    const newAdjusted = (closing || 0) + newAdj;
+    tx.set(ref, {
+      closing_stock: closing,
+      adjustment: newAdj,
+      adjusted_count: newAdjusted,
+      synced_at: cur.synced_at || null,
+      adjustment_updated_at: new Date().toISOString()
+    }, { merge: true });
+  });
+
+  // audit log entry — the 3 columns: sku, amount, reason (+ timestamp)
+  await addDoc(collection(window._FS, 'stock_adjustments'), {
+    sku: sku,
+    amount: amount,
+    reason: reason || '',
+    at: new Date().toISOString()
+  });
+
+  // update local DATA so UI reflects immediately
+  const row = DATA.find(r => r.sku === sku);
+  if (row) {
+    row.adjustment = (parseFloat(row.adjustment) || 0) + amount;
+    row.adjusted_count = (row.adjustment === 0) ? null : ((row.closing_stock || 0) + row.adjustment);
+  }
+}
+
+/* Clear an item's adjustment back to 0 (logs the reversal). */
+async function clearAdjustment(sku) {
+  const { doc, runTransaction, collection, addDoc } = window._fsApi;
+  const ref = doc(window._FS, 'live_stock', sku);
+  let prevAdj = 0;
+  await runTransaction(window._FS, async (tx) => {
+    const snap = await tx.get(ref);
+    const cur  = snap.exists() ? snap.data() : {};
+    prevAdj = parseFloat(cur.adjustment) || 0;
+    const closing = (cur.closing_stock != null) ? parseFloat(cur.closing_stock) : null;
+    tx.set(ref, {
+      adjustment: 0,
+      adjusted_count: (closing || 0),
+      adjustment_updated_at: new Date().toISOString()
+    }, { merge: true });
+  });
+  if (prevAdj !== 0) {
+    await addDoc(collection(window._FS, 'stock_adjustments'), {
+      sku: sku, amount: -prevAdj, reason: 'Cleared adjustment', at: new Date().toISOString()
+    });
+  }
+  const row = DATA.find(r => r.sku === sku);
+  if (row) { row.adjustment = 0; row.adjusted_count = null; }
+}
+
+/* Fetch adjustment history for a SKU (most recent first). */
+async function getAdjustmentHistory(sku) {
+  const { collection, query, where, getDocs } = window._fsApi;
+  const snap = await getDocs(query(collection(window._FS, 'stock_adjustments'), where('sku','==',sku)));
+  const rows = [];
+  snap.forEach(d => rows.push(d.data()));
+  rows.sort((a,b) => (b.at||'').localeCompare(a.at||''));
+  return rows;
+}
+
+/* Edit an item field that lives on the materials doc (vendor, MOQ, price).
+   field: one of blr_v1, ncr_v1, hyd_v1, chn_v1, supplier_moq, unit_price,
+          ncr_lead_time, hyd_lead_time, chn_lead_time */
+async function editVmField(sku, field, value) {
+  const { doc, setDoc } = window._fsApi;
+  const ref = doc(window._FS, 'vm_classification', sku);
+  await setDoc(ref, { sku: sku, [field]: value }, { merge: true });
+  const row = DATA.find(r => r.sku === sku);
+  if (row) {
+    if (field === 'seasonal_consumption') row.seasonal_consumption = (value===''||value==null)?null:parseFloat(value);
+    else if (field === 'uncertainty_min') row.uncertainty_min = (value===''||value==null)?null:parseFloat(value);
+    else if (field === 'uncertainty_max') row.uncertainty_max = (value===''||value==null)?null:parseFloat(value);
+  }
+}
+
+async function editMaterialField(sku, field, value) {
+  const { doc, setDoc } = window._fsApi;
+  const ref = doc(window._FS, 'materials', sku);
+  await setDoc(ref, { [field]: value }, { merge: true });
+  // reflect locally
+  const row = DATA.find(r => r.sku === sku);
+  if (row) {
+    if (field === 'unit_price') row.unit_price = parseFloat(value)||null;
+    else if (field === 'supplier_moq') row.supplier_moq = value;
+    else if (field === 'blr_v1') {
+      row._blr_vendor_raw = value;
+      const p = parseBlrVendor(value);
+      row._blr_vendor_name = p.name; row._blr_lead = p.lead;
+      row.regions.BLR.vendor = value; row.regions.BLR.lead_time = p.lead;
+    }
+    else if (field === 'ncr_v1') row.regions.NCR.vendor = value;
+    else if (field === 'hyd_v1') row.regions.HYD.vendor = value;
+    else if (field === 'chn_v1') row.regions.CHN.vendor = value;
+    else if (field === 'ncr_lead_time') row.regions.NCR.lead_time = parseFloat(value)||null;
+    else if (field === 'hyd_lead_time') row.regions.HYD.lead_time = parseFloat(value)||null;
+    else if (field === 'chn_lead_time') row.regions.CHN.lead_time = parseFloat(value)||null;
+    else if (field === 'min_distrbn_qty') row.min_distrbn_qty = (value===''||value==null)?null:parseFloat(value);
+    else if (field === 'blr_hub_capacity') row.blr_hub_capacity = (value===''||value==null)?null:parseFloat(value);
+    else if (field === 'season') row.season = value;
+    else if (field === 'launch_start') row.launch_start = value;
+    else if (field === 'launch_end') row.launch_end = value;
+    else if (field === 'ratelist_name') row.ratelist_name = value;
+    else if (field === 'blr_v2') row.blr_v2 = value;
+    else if (field === 'ncr_v2') row.ncr_v2 = value;
+    else if (field === 'chn_v2') row.chn_v2 = value;
+    else if (field === 'material_description') row.description = value;
+    else if (field === 'uom') row.uom = value;
+    else if (field === 'material_category_desc') row.category_desc = value;
+    else if (field === 'category') row.category = value;
+    else if (field === 'major_category') row.major_category = value;
+    else if (field === 'classification') row.classification = value;
+    else if (field === 'type') row.type = value;
+    else if (field === 'criticality') row.criticality = value;
+    else if (field === 'str_reorder_type') row.str_reorder_type = value;
+    else if (field === 'cat_mgr') row.cat_manager = value;
+    else if (['blr','chn','hyd','pun','ncr'].includes(field)) row[field] = value;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ADJUSTMENT + EDIT  UI  (modal)
+   ══════════════════════════════════════════════════════════════ */
+function _adjModalHTML() {
+  return `
+  <div id="adj-modal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2000;align-items:center;justify-content:center">
+    <div style="background:var(--bg);border-radius:8px;max-width:560px;width:92%;max-height:88vh;overflow:auto;box-shadow:var(--shadow-lg)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--border)">
+        <div><div style="font-weight:700;color:var(--navy)" id="adj-title">Stock Adjustment</div>
+        <div style="font-size:12px;color:var(--text-3)" id="adj-sub"></div></div>
+        <button onclick="document.getElementById('adj-modal').style.display='none'" style="border:none;background:none;font-size:22px;cursor:pointer;color:var(--text-3)">&times;</button>
+      </div>
+      <div style="padding:22px">
+        <div style="display:flex;gap:16px;margin-bottom:18px">
+          <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center">
+            <div style="font-size:11px;color:var(--text-3);text-transform:uppercase">Live Stock</div>
+            <div style="font-size:22px;font-weight:700;color:var(--navy)" id="adj-live">—</div>
+            <div style="font-size:10px;color:var(--text-4)" id="adj-synced"></div>
+          </div>
+          <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center">
+            <div style="font-size:11px;color:var(--text-3);text-transform:uppercase">Adjustment</div>
+            <div style="font-size:22px;font-weight:700;color:var(--orange)" id="adj-cur">0</div>
+          </div>
+          <div style="flex:1;background:var(--navy-soft);border-radius:6px;padding:12px;text-align:center">
+            <div style="font-size:11px;color:var(--text-3);text-transform:uppercase">Adjusted Count</div>
+            <div style="font-size:22px;font-weight:700;color:var(--green)" id="adj-result">—</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px">
+          <div style="flex:0 0 130px">
+            <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">Amount (+/-)</label>
+            <input id="adj-amount" type="number" placeholder="e.g. 25 or -10" style="width:100%;padding:9px;border:1px solid var(--border-2);border-radius:6px;font-size:15px">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">Reason / Note</label>
+            <input id="adj-reason" type="text" placeholder="e.g. physical recount, damaged" style="width:100%;padding:9px;border:1px solid var(--border-2);border-radius:6px;font-size:14px">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:20px">
+          <button id="adj-apply" style="background:var(--navy);color:#fff;border:none;padding:9px 18px;border-radius:6px;font-weight:600;cursor:pointer">Apply Adjustment</button>
+          <button id="adj-clear" style="background:var(--red-soft);color:var(--red);border:none;padding:9px 14px;border-radius:6px;font-weight:600;cursor:pointer">Clear Adjustment</button>
+          <span id="adj-msg" style="font-size:12px;align-self:center"></span>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin-bottom:8px;border-top:1px solid var(--border);padding-top:14px">History</div>
+        <div id="adj-history" style="font-size:13px;color:var(--text-2)">Loading…</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+let _adjSku = null;
+function openAdjustModal(sku) {
+  _adjSku = sku;
+  const row = DATA.find(r => r.sku === sku);
+  if (!row) return;
+  document.getElementById('adj-title').textContent = sku;
+  document.getElementById('adj-sub').textContent = row.description || '';
+  document.getElementById('adj-live').textContent = row.closing_stock != null ? fmtNum(row.closing_stock) : '—';
+  document.getElementById('adj-synced').textContent = row.synced_at ? ('as of ' + new Date(row.synced_at).toLocaleString()) : 'not synced';
+  document.getElementById('adj-cur').textContent = (row.adjustment>0?'+':'') + (row.adjustment||0);
+  document.getElementById('adj-result').textContent = row.adjusted_count != null ? fmtNum(row.adjusted_count) : '—';
+  document.getElementById('adj-amount').value = '';
+  document.getElementById('adj-reason').value = '';
+  document.getElementById('adj-msg').textContent = '';
+  document.getElementById('adj-modal').style.display = 'flex';
+  _loadAdjHistory(sku);
+}
+
+async function _loadAdjHistory(sku) {
+  const box = document.getElementById('adj-history');
+  box.textContent = 'Loading…';
+  try {
+    const hist = await getAdjustmentHistory(sku);
+    if (!hist.length) { box.innerHTML = '<span style="color:var(--text-4)">No adjustments yet.</span>'; return; }
+    box.innerHTML = hist.map(h => `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--surface-2)">
+        <span style="font-weight:600;color:${h.amount>=0?'var(--green)':'var(--red)'}">${h.amount>0?'+':''}${h.amount}</span>
+        <span style="flex:1;padding:0 10px;color:var(--text-2)">${h.reason||'—'}</span>
+        <span style="color:var(--text-4);font-size:11px">${h.at?new Date(h.at).toLocaleString():''}</span>
+      </div>`).join('');
+  } catch(e){ box.innerHTML = '<span style="color:var(--red)">Could not load history</span>'; }
+}
+
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'adj-apply') {
+    const amt = document.getElementById('adj-amount').value;
+    const reason = document.getElementById('adj-reason').value;
+    const msg = document.getElementById('adj-msg');
+    if (amt === '' || isNaN(parseFloat(amt))) { msg.style.color='var(--red)'; msg.textContent='Enter a number'; return; }
+    msg.style.color='var(--text-3)'; msg.textContent='Saving…';
+    try {
+      await applyAdjustment(_adjSku, amt, reason);
+      openAdjustModal(_adjSku);   // refresh figures + history
+      renderTable();
+      document.getElementById('adj-msg').textContent='Saved ✓';
+    } catch(err){ msg.style.color='var(--red)'; msg.textContent='Error: '+err.message; }
+  }
+  if (e.target && e.target.id === 'adj-clear') {
+    const msg = document.getElementById('adj-msg');
+    msg.style.color='var(--text-3)'; msg.textContent='Clearing…';
+    try { await clearAdjustment(_adjSku); openAdjustModal(_adjSku); renderTable(); document.getElementById('adj-msg').textContent='Cleared ✓'; }
+    catch(err){ msg.style.color='var(--red)'; msg.textContent='Error: '+err.message; }
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════
+   EDIT MODAL  — vendor / lead time / unit price / MOQ
+   ══════════════════════════════════════════════════════════════ */
+function _editModalHTML() {
+  return `
+  <div id="edit-modal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2000;align-items:center;justify-content:center">
+    <div style="background:var(--bg);border-radius:8px;max-width:600px;width:92%;max-height:88vh;overflow:auto;box-shadow:var(--shadow-lg)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--border)">
+        <div><div style="font-weight:700;color:var(--navy)" id="edit-title">Edit Item</div>
+        <div style="font-size:12px;color:var(--text-3)" id="edit-sub"></div></div>
+        <button onclick="document.getElementById('edit-modal').style.display='none'" style="border:none;background:none;font-size:22px;cursor:pointer;color:var(--text-3)">&times;</button>
+      </div>
+      <div style="padding:22px" id="edit-body"></div>
+    </div>
+  </div>`;
+}
+
+let _editSku = null;
+function _ef(label, id, val, hint) {
+  return `<div style="margin-bottom:14px">
+    <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">${label}${hint?` <span style="color:var(--text-4)">${hint}</span>`:''}</label>
+    <input id="${id}" value="${val==null?'':String(val).replace(/"/g,'&quot;')}" style="width:100%;padding:9px;border:1px solid var(--border-2);border-radius:6px;font-size:14px">
+  </div>`;
+}
+// Normalize any date-ish value to YYYY-MM-DD for the date input
+function _toISODate(v){
+  if(v==null||v==='') return '';
+  const s=String(v).trim();
+  // already ISO
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  const d=new Date(s);
+  if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+  return '';  // unparseable -> leave blank in picker (original kept until changed)
+}
+function _efDate(label, id, val, hint) {
+  return `<div style="margin-bottom:14px">
+    <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">${label}${hint?` <span style="color:var(--text-4)">${hint}</span>`:''}</label>
+    <input type="date" id="${id}" value="${_toISODate(val)}" style="width:100%;padding:9px;border:1px solid var(--border-2);border-radius:6px;font-size:14px">
+  </div>`;
+}
+
+function openEditModal(sku) {
+  _editSku = sku;
+  const r = DATA.find(x => x.sku === sku);
+  if (!r) return;
+  document.getElementById('edit-title').textContent = 'Edit — ' + sku;
+  document.getElementById('edit-sub').textContent = r.description || '';
+  const body = document.getElementById('edit-body');
+  body.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin-bottom:8px">Material Details</div>
+    ${_ef('Material Description','ed-desc',r.description)}
+    ${_ef('UOM','ed-uom',r.uom)}
+    ${_ef('Material Category Desc','ed-catdesc',r.category_desc)}
+    ${_ef('Category','ed-category',r.category)}
+    ${_ef('Major Category','ed-major',r.major_category)}
+    ${_ef('Classification','ed-classification',r.classification)}
+    ${_ef('Type','ed-type',r.type)}
+    ${_ef('Criticality','ed-criticality',r.criticality,'V.High / High / Med / Low')}
+    ${_ef('Reorder Type','ed-reorder',r.str_reorder_type)}
+    ${_ef('Category Manager','ed-catmgr',r.cat_manager)}
+    ${_ef('Cities (B C H P D)','ed-cities',[r.blr,r.chn,r.hyd,r.pun,r.ncr].filter(Boolean).join(' '),'space-separated letters present')}
+    <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Pricing & Order</div>
+    ${_ef('Unit Price (₹)','ed-price',r.unit_price)}
+    ${_ef('Supplier MOQ','ed-moq',r.supplier_moq)}
+    ${_ef('Distrbn MOQ','ed-dmoq',r.min_distrbn_qty)}
+    ${_ef('BLR HUB Capacity','ed-hubcap',r.blr_hub_capacity)}
+    <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Season</div>
+    ${_ef('Season','ed-season',r.season)}
+    ${_ef('Seasonal Consumption','ed-seasoncons',r.seasonal_consumption)}
+    ${_efDate('Launch Start Date','ed-launch-start',r.launch_start)}
+    ${_efDate('Launch End Date','ed-launch-end',r.launch_end)}
+    ${_ef('Ratelist Name','ed-ratelist',r.ratelist_name)}
+    <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Vendors</div>
+    ${_ef('BLR Vendor','ed-blr',r._blr_vendor_raw,'format: Name-LeadTime e.g. Canvera-3')}
+    ${_ef('BLR Vendor 2','ed-blr2',r.blr_v2)}
+    ${_ef('NCR Vendor','ed-ncr',r.regions.NCR.vendor)}
+    ${_ef('NCR Vendor 2','ed-ncr2',r.ncr_v2)}
+    ${_ef('NCR Lead time (days)','ed-ncr-lt',r.regions.NCR.lead_time)}
+    ${_ef('HYD Vendor','ed-hyd',r.regions.HYD.vendor)}
+    ${_ef('HYD Lead time (days)','ed-hyd-lt',r.regions.HYD.lead_time)}
+    ${_ef('CHN Vendor','ed-chn',r.regions.CHN.vendor)}
+    ${_ef('CHN Vendor 2','ed-chn2',r.chn_v2)}
+    ${_ef('CHN Lead time (days)','ed-chn-lt',r.regions.CHN.lead_time)}
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button id="edit-save" style="background:var(--navy);color:#fff;border:none;padding:9px 20px;border-radius:6px;font-weight:600;cursor:pointer">Save Changes</button>
+      <span id="edit-msg" style="font-size:12px;align-self:center"></span>
+    </div>
+    <div style="font-size:11px;color:var(--text-4);margin-top:10px">BLR lead time is read from the vendor suffix (Canvera-3 → 3 days). NCR/HYD/CHN lead times are separate fields above.</div>`;
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'edit-save') {
+    const msg = document.getElementById('edit-msg');
+    msg.style.color = 'var(--text-3)'; msg.textContent = 'Saving…';
+    const r = DATA.find(x => x.sku === _editSku);
+    try {
+      const edits = [];
+      // --- Material Details fields ---
+      const _md = {
+        material_description: document.getElementById('ed-desc').value.trim(),
+        uom: document.getElementById('ed-uom').value.trim(),
+        material_category_desc: document.getElementById('ed-catdesc').value.trim(),
+        category: document.getElementById('ed-category').value.trim(),
+        major_category: document.getElementById('ed-major').value.trim(),
+        classification: document.getElementById('ed-classification').value.trim(),
+        type: document.getElementById('ed-type').value.trim(),
+        criticality: document.getElementById('ed-criticality').value.trim(),
+        str_reorder_type: document.getElementById('ed-reorder').value.trim(),
+        cat_mgr: document.getElementById('ed-catmgr').value.trim(),
+      };
+      const _mdCur = {
+        material_description: r.description, uom: r.uom, material_category_desc: r.category_desc,
+        category: r.category, major_category: r.major_category, classification: r.classification,
+        type: r.type, criticality: r.criticality, str_reorder_type: r.str_reorder_type, cat_mgr: r.cat_manager,
+      };
+      Object.keys(_md).forEach(f => {
+        if (_md[f] !== String(_mdCur[f] ?? '')) edits.push(editMaterialField(_editSku, f, _md[f]||null));
+      });
+      // cities: parse the space-separated letters back to blr/chn/hyd/pun/ncr
+      const _citiesRaw = document.getElementById('ed-cities').value.toUpperCase();
+      const _cityMap = {B:'blr',C:'chn',H:'hyd',P:'pun',D:'ncr'};
+      Object.entries(_cityMap).forEach(([letter,field])=>{
+        const present = _citiesRaw.includes(letter) ? letter : null;
+        const cur = r[field] || null;
+        if ((present||'') !== (cur||'')) edits.push(editMaterialField(_editSku, field, present));
+      });
+      const price = document.getElementById('ed-price').value;
+      const moq   = document.getElementById('ed-moq').value;
+      const blr   = document.getElementById('ed-blr').value.trim();
+      const ncr   = document.getElementById('ed-ncr').value.trim();
+      const hyd   = document.getElementById('ed-hyd').value.trim();
+      const chn   = document.getElementById('ed-chn').value.trim();
+      const ncrLt = document.getElementById('ed-ncr-lt').value;
+      const hydLt = document.getElementById('ed-hyd-lt').value;
+      const chnLt = document.getElementById('ed-chn-lt').value;
+      const dmoq  = document.getElementById('ed-dmoq').value;
+      const hubcap= document.getElementById('ed-hubcap').value;
+      const season= document.getElementById('ed-season').value.trim();
+      const scons = document.getElementById('ed-seasoncons').value;
+      const launchStart= document.getElementById('ed-launch-start').value.trim();
+      const launchEnd= document.getElementById('ed-launch-end').value.trim();
+      const ratelist=document.getElementById('ed-ratelist').value.trim();
+      const blr2  = document.getElementById('ed-blr2').value.trim();
+      const ncr2  = document.getElementById('ed-ncr2').value.trim();
+      const chn2  = document.getElementById('ed-chn2').value.trim();
+
+      if (dmoq !== String(r.min_distrbn_qty ?? '')) edits.push(editMaterialField(_editSku,'min_distrbn_qty', dmoq===''?null:parseFloat(dmoq)));
+      if (hubcap !== String(r.blr_hub_capacity ?? '')) edits.push(editMaterialField(_editSku,'blr_hub_capacity', hubcap===''?null:parseFloat(hubcap)));
+      if (season !== String(r.season ?? '')) edits.push(editMaterialField(_editSku,'season', season||null));
+      if (launchStart !== String(r.launch_start ?? '')) edits.push(editMaterialField(_editSku,'launch_start', launchStart||null));
+      if (launchEnd !== String(r.launch_end ?? '')) edits.push(editMaterialField(_editSku,'launch_end', launchEnd||null));
+      if (ratelist !== String(r.ratelist_name ?? '')) edits.push(editMaterialField(_editSku,'ratelist_name', ratelist||null));
+      if (blr2 !== String(r.blr_v2 ?? '')) edits.push(editMaterialField(_editSku,'blr_v2', blr2||null));
+      if (ncr2 !== String(r.ncr_v2 ?? '')) edits.push(editMaterialField(_editSku,'ncr_v2', ncr2||null));
+      if (chn2 !== String(r.chn_v2 ?? '')) edits.push(editMaterialField(_editSku,'chn_v2', chn2||null));
+      if (scons !== String(r.seasonal_consumption ?? '')) edits.push(editVmField(_editSku,'seasonal_consumption', scons===''?null:parseFloat(scons)));
+      if (price !== String(r.unit_price ?? '')) edits.push(editMaterialField(_editSku,'unit_price', price===''?null:parseFloat(price)));
+      if (moq !== String(r.supplier_moq ?? '')) edits.push(editMaterialField(_editSku,'supplier_moq', moq===''?null:(isNaN(parseFloat(moq))?moq:parseFloat(moq))));
+      if (blr !== String(r._blr_vendor_raw ?? '')) edits.push(editMaterialField(_editSku,'blr_v1', blr||null));
+      if (ncr !== String(r.regions.NCR.vendor ?? '')) edits.push(editMaterialField(_editSku,'ncr_v1', ncr||null));
+      if (hyd !== String(r.regions.HYD.vendor ?? '')) edits.push(editMaterialField(_editSku,'hyd_v1', hyd||null));
+      if (chn !== String(r.regions.CHN.vendor ?? '')) edits.push(editMaterialField(_editSku,'chn_v1', chn||null));
+      if (ncrLt !== String(r.regions.NCR.lead_time ?? '')) edits.push(editMaterialField(_editSku,'ncr_lead_time', ncrLt===''?null:parseFloat(ncrLt)));
+      if (hydLt !== String(r.regions.HYD.lead_time ?? '')) edits.push(editMaterialField(_editSku,'hyd_lead_time', hydLt===''?null:parseFloat(hydLt)));
+      if (chnLt !== String(r.regions.CHN.lead_time ?? '')) edits.push(editMaterialField(_editSku,'chn_lead_time', chnLt===''?null:parseFloat(chnLt)));
+
+      await Promise.all(edits);
+      msg.style.color = 'var(--green)'; msg.textContent = edits.length ? `Saved ${edits.length} change(s) ✓` : 'No changes';
+      renderTable();
+    } catch(err) { msg.style.color = 'var(--red)'; msg.textContent = 'Error: ' + err.message; }
+  }
+});
+
+/* inject the two modals into the page */
+document.addEventListener('DOMContentLoaded', () => {
+  document.body.insertAdjacentHTML('beforeend', _adjModalHTML() + _editModalHTML());
+});
+
+
+
+
+
+/* ── EXPORT CSV ─────────────────────────────── */
+document.querySelector('.btn').addEventListener('click', function(e){
+  if(this.textContent.includes('Export')){
+    const list = applyFilters();
+    const hdrs = ['SKU','Description','Major Category','Category','UOM','Criticality','Classification','Type','Supplier MOQ','Unit Price','Closing Stock','Cons/Month','Cons Value','Status','Cities'];
+    const rows = list.map(r => [
+      r.sku, r.description, r.major_category, r.category, r.uom,
+      r.criticality, r.classification, r.type, r.supplier_moq||'',
+      r.unit_price||'', r.closing_stock||'', r.consumption_month||'',
+      r.cnsump_value||'', isDiscontinued(r)?'Discontinued':'Active',
+      [r.blr?'BLR':'',r.chn?'CHN':'',r.hyd?'HYD':'',r.pun?'PUN':'',r.ncr?'NCR':''].filter(Boolean).join('/')
+    ]);
+    const csv = [hdrs,...rows].map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const a = Object.assign(document.createElement('a'),{href:'data:text/csv;charset=utf-8,'+encodeURIComponent(csv),download:'printo_materials_'+new Date().toISOString().slice(0,10)+'.csv'});
+    a.click();
+  }
+});
+
+/* ── SEARCH AUTOCOMPLETE ────────────────────── */
+const _sugs = document.getElementById('search-sugs');
+document.getElementById('search').addEventListener('input', function(e){
+  const q = this.value.trim().toLowerCase();
+  state.search = q;
+  if(q.length >= 1 && DATA.length > 0){
+    const hits = DATA.filter(r=>
+      r.sku.toLowerCase().includes(q) ||
+      r.description.toLowerCase().includes(q) ||
+      (r.category||'').toLowerCase().includes(q)
+    ).slice(0,8);
+    if(hits.length){
+      _sugs.innerHTML = hits.map(r=>`
+        <div class="sug-item" data-sku="${r.sku}">
+          <span class="sug-sku">${r.sku}</span>
+          <span class="sug-desc">${r.description}</span>
+          <span class="sug-cat">${r.major_category||''}</span>
+        </div>`).join('');
+      _sugs.classList.add('open');
+    } else {
+      _sugs.classList.remove('open');
+    }
+  } else {
+    _sugs.classList.remove('open');
+  }
+  if(state.view==='analytics')renderAnalytics();else renderTable();
+});
+_sugs.addEventListener('click', e=>{
+  const item = e.target.closest('.sug-item');
+  if(item){
+    const sku = item.dataset.sku;
+    document.getElementById('search').value = sku;
+    state.search = sku.toLowerCase();
+    _sugs.classList.remove('open');
+    renderTable();
+  }
+});
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.search-wrap')) _sugs.classList.remove('open');
+});
+
+/* ── ADD MATERIAL MODAL ─────────────────────── */
+const MODAL_FORMS = {
+  material: {
+    table: 'materials',
+    fields: [
+      {name:'sku',label:'SKU',type:'text',required:true,half:false},
+      {name:'material_description',label:'Material Description',type:'text',required:true,half:false},
+      {name:'classification',label:'Classification',type:'select',opts:['Class A','Class B','Class C'],half:true},
+      {name:'type',label:'Type',type:'select',opts:['Class A1','Class A2','Class A3','Class B1','Class B2','Class C1'],half:true},
+      {name:'major_category',label:'Major Category',type:'text',half:true},
+      {name:'category',label:'Sub Category',type:'text',half:true},
+      {name:'uom',label:'UOM',type:'text',half:true},
+      {name:'criticality',label:'Criticality',type:'select',opts:['V.High','High','Med','Low'],half:true},
+      {name:'supplier_moq',label:'Supplier MOQ',type:'number',half:true},
+      {name:'str_reorder_type',label:'STR & Reorder Type',type:'text',half:true},
+    ]
+  },
+  vm_params: {
+    table: 'vm_classification',
+    fields: [
+      {name:'sku',label:'SKU',type:'text',required:true,half:false},
+      {name:'avg_unit_price',label:'Avg Unit Price',type:'number',half:true},
+      {name:'cnsump_value',label:'Consumption Value',type:'number',half:true},
+      {name:'min_qty',label:'Min Qty',type:'number',half:true},
+      {name:'max_qty',label:'Max Qty',type:'number',half:true},
+      {name:'min_val',label:'Min Value',type:'number',half:true},
+      {name:'max_val',label:'Max Value',type:'number',half:true},
+      {name:'buffer_lead_time',label:'Buffer Lead Time',type:'number',half:true},
+      {name:'ord_freq',label:'Order Frequency (days)',type:'number',half:true},
+      {name:'helper',label:'Helper Key',type:'text',half:false},
+    ]
+  },
+  vendor: {
+    table: 'vendors',
+    fields: [
+      {name:'vendor_name_sys',label:'Vendor Name (System)',type:'text',required:true,half:false},
+      {name:'vendor_name_short',label:'Vendor Short Name',type:'text',half:true},
+      {name:'region',label:'Region',type:'select',opts:['Blr','CHN','HYD','NCR','PUN'],half:true},
+      {name:'act_lead_time',label:'Actual Lead Time (days)',type:'number',half:true},
+      {name:'vendor_plus_ltime',label:'Vendor + Lead Time Label',type:'text',half:true},
+    ]
+  },
+  consumption: {
+    table: 'consumption_2025',
+    fields: [
+      {name:'sku',label:'SKU',type:'text',required:true,half:false},
+      {name:'material_desc',label:'Material Description',type:'text',half:false},
+      {name:'blr_3',label:'BLR 3-Mo Avg',type:'number',half:true},
+      {name:'chn_3',label:'CHN 3-Mo Avg',type:'number',half:true},
+      {name:'hyd_3',label:'HYD 3-Mo Avg',type:'number',half:true},
+      {name:'ncr_3',label:'NCR 3-Mo Avg',type:'number',half:true},
+      {name:'pun_3',label:'PUN 3-Mo Avg',type:'number',half:true},
+      {name:'grand_total',label:'Grand Total',type:'number',half:true},
+      {name:'vm_consumption',label:'VM Consumption',type:'number',half:true},
+      {name:'region_vm',label:'Region VM',type:'text',half:true},
+    ]
+  }
+};
+
+let _curTab = 'material';
+
+function _renderModalForm(tab){
+  const form = MODAL_FORMS[tab];
+  const mb = document.getElementById('modal-body');
+  let html2 = '';
+  let i = 0;
+  const fields = form.fields;
+  while(i < fields.length){
+    const f = fields[i];
+    if(!f.half){
+      html2 += `<div class="form-row"><label class="form-lbl">${f.label}${f.required?' *':''}</label>`;
+      if(f.type==='select'){
+        html2 += `<select class="form-inp form-select" name="${f.name}"><option value="">Select...</option>${f.opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
+      } else {
+        html2 += `<input class="form-inp" type="${f.type}" name="${f.name}" placeholder="${f.label}">`;
+      }
+      html2 += '</div>';
+      i++;
+    } else {
+      // Pair up half-width fields
+      const f2 = fields[i+1] && fields[i+1].half ? fields[i+1] : null;
+      html2 += `<div class="form-row half">`;
+      [f, f2].filter(Boolean).forEach(fld=>{
+        html2 += `<div><label class="form-lbl">${fld.label}</label>`;
+        if(fld.type==='select'){
+          html2 += `<select class="form-inp form-select" name="${fld.name}"><option value="">Select...</option>${fld.opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
+        } else {
+          html2 += `<input class="form-inp" type="${fld.type}" name="${fld.name}" placeholder="${fld.label}">`;
+        }
+        html2 += '</div>';
+      });
+      html2 += '</div>';
+      i += f2 ? 2 : 1;
+    }
+  }
+  html2 += '<div class="form-msg" id="form-msg"></div>';
+  mb.innerHTML = html2;
+}
+
+document.querySelector('.btn.primary').addEventListener('click', ()=>{
+  _curTab = 'material';
+  document.querySelectorAll('.mtab').forEach(t=>t.classList.toggle('active', t.dataset.mtab==='material'));
+  _renderModalForm('material');
+  document.getElementById('add-modal').classList.add('open');
+});
+document.getElementById('modal-close-btn').addEventListener('click', ()=>document.getElementById('add-modal').classList.remove('open'));
+document.getElementById('modal-cancel').addEventListener('click', ()=>document.getElementById('add-modal').classList.remove('open'));
+document.querySelectorAll('.mtab').forEach(t=>t.addEventListener('click', ()=>{
+  _curTab = t.dataset.mtab;
+  document.querySelectorAll('.mtab').forEach(x=>x.classList.toggle('active', x===t));
+  _renderModalForm(_curTab);
+}));
+
+document.getElementById('modal-save').addEventListener('click', async ()=>{
+  const form = MODAL_FORMS[_curTab];
+  const inputs = document.querySelectorAll('#modal-body .form-inp');
+  const record = {};
+  inputs.forEach(inp=>{ if(inp.value.trim()) record[inp.name] = inp.type==='number' ? parseFloat(inp.value) : inp.value.trim(); });
+  const msg = document.getElementById('form-msg');
+  msg.className = 'form-msg';
+  if(!record[form.fields.find(f=>f.required)?.name]){
+    msg.textContent = 'Please fill in the required fields (*)';
+    msg.className = 'form-msg err'; return;
+  }
+  const saveBtn = document.getElementById('modal-save');
+  saveBtn.textContent = 'Saving...'; saveBtn.disabled = true;
+  let error=null; try{ const {collection,addDoc}=window._fsApi; await addDoc(collection(window._FS, form.table), record); }catch(ex){ error=ex; }
+  saveBtn.textContent = 'Save to database'; saveBtn.disabled = false;
+  if(error){
+    msg.textContent = 'Error: ' + error.message; msg.className = 'form-msg err';
+  } else {
+    msg.textContent = 'Saved successfully! Refresh to see changes.'; msg.className = 'form-msg ok';
+    setTimeout(()=>document.getElementById('add-modal').classList.remove('open'), 1500);
+  }
+});
+document.getElementById('add-modal').addEventListener('click', e=>{
+  if(e.target === document.getElementById('add-modal')) document.getElementById('add-modal').classList.remove('open');
+});
+
+
+function reorderPill(val){
+  if(!val || val===''||val===null) return '<span style="color:var(--text-4);font-style:italic">—</span>';
+  const v = val.toLowerCase();
+  let cls='other', label=val;
+  if(v.includes('str/reorder')&&v.includes('discontinued')){cls='discontinued';label='Str/Reorder (Disc.)'}
+  else if(v==='str/reorder'){cls='str-reorder';label='Str/Reorder'}
+  else if(v==='str/req'){cls='str-req';label='Str/Req'}
+  else if(v==='hub/reorder'){cls='hub-reorder';label='Hub/Reorder'}
+  else if(v==='hub/req'){cls='hub-req';label='Hub/Req'}
+  else if(v==='vm/req'||v==='vm/reorder'){cls='vm-req';label=val}
+  else if(v==='outstation'){cls='outstation';label='Outstation'}
+  else if(v==='canvera'){cls='canvera';label='Canvera'}
+  else if(v.includes('discontinu')){cls='discontinued';label='Discontinued'}
+  return `<span class="rpill ${cls}">${label}</span>`;
+}
+
+
+/* ══ REGION DASHBOARD ══════════════════════════════════════════ */
+let _rdashCharts = {};
+
+function _destroyRdashCharts(){
+  Object.values(_rdashCharts).forEach(c=>{try{c.destroy()}catch(e){}});
+  _rdashCharts = {};
+}
+
+function _rdashChart(id, type, labels, values, colors, horizontal){
+  const ctx = document.getElementById(id);
+  if(!ctx) return;
+  const isPie = type==='doughnut'||type==='pie';
+  _rdashCharts[id] = new Chart(ctx, {
+    type: type,
+    data: {
+      labels,
+      datasets:[{
+        data: values,
+        backgroundColor: colors || ['#1B3560','#F57224','#2A4F87','#1D4ED8','#15803D','#7C3AED','#B45309','#B91C1C','#FF8C45','#6B7280'],
+        borderColor: isPie?'#fff':'#1B3560',
+        borderWidth: isPie?2:0,
+        borderRadius: isPie?0:4
+      }]
+    },
+    options:{
+      indexAxis: horizontal?'y':'x',
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:isPie,position:'right',labels:{font:{family:'Inter',size:11},boxWidth:10,padding:8}},
+        tooltip:{
+          backgroundColor:'#111827',titleColor:'#fff',bodyColor:'#F9FAFB',
+          titleFont:{family:'Inter',weight:'600',size:12},
+          bodyFont:{family:'JetBrains Mono',size:11},
+          padding:8,cornerRadius:6,displayColors:false
+        }
+      },
+      scales: isPie?{}:{
+        x:{ticks:{font:{family:'JetBrains Mono',size:10},color:'#6B7280'},grid:{color:'#EEF0F4'}},
+        y:{ticks:{font:{family:'JetBrains Mono',size:10},color:'#6B7280'},grid:{color:'#EEF0F4'}}
+      }
+    }
+  });
+}
+
+function renderRegionDashboard(regionKey){
+  const reg = REGIONS.find(r=>r.key===regionKey);
+  if(!reg) return;
+
+  // Filter materials for this region
+  const rows = DATA.filter(r=>{
+    if(state.status==='Active' && (isDiscontinued(r)||!r.str_reorder_type||String(r.str_reorder_type).trim()==='')) return false;
+    return r[reg.flag] && r[reg.flag]!=='Discontinued';
+  });
+
+  // ── Header ──
+  document.getElementById('rdash-title').textContent = reg.name;
+  document.getElementById('rdash-subtitle').textContent = 'Regional Materials Dashboard — ' + rows.length + ' active SKUs';
+
+  // Stats in header
+  const totalConsumption = rows.reduce((s,r)=>s+(parseFloat(r.regions?.[reg.key]?.consumption_3mo)||0),0);
+  const vendors = new Set(rows.map(r=>r.regions?.[reg.key]?.vendor).filter(v=>v&&v!=='CS'&&v!=='Common'));
+  const stockVal = rows.reduce((s,r)=>s+((r.closing_stock||0)*(r.unit_price||0)),0);
+  document.getElementById('rdash-stats').innerHTML = `
+    <div><div class="rdash-stat-label">Total SKUs</div><div class="rdash-stat-val"><em>${rows.length}</em></div></div>
+    <div><div class="rdash-stat-label">Vendors</div><div class="rdash-stat-val">${vendors.size}</div></div>
+    <div><div class="rdash-stat-label">3-Mo Consumption</div><div class="rdash-stat-val">${fmtConsumption(totalConsumption)}</div></div>
+    <div><div class="rdash-stat-label">Stock Value</div><div class="rdash-stat-val">${fmtPrice(stockVal)}</div></div>
+  `;
+
+  // ── KPI Cards ──
+  const active = rows.filter(r=>!isDiscontinued(r)).length;
+  const avgLeadTimes = rows.map(r=>r.regions?.[reg.key]?.lead_time).filter(x=>x!=null);
+  const avgLead = avgLeadTimes.length ? Math.round(avgLeadTimes.reduce((a,b)=>a+b,0)/avgLeadTimes.length) : null;
+  const vhigh = rows.filter(r=>r.criticality==='V.High').length;
+  const high = rows.filter(r=>r.criticality==='High').length;
+
+  document.getElementById('rdash-kpis').innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">Total SKUs</div><div class="kpi-value">${rows.length}</div><div class="kpi-sub">stocked in ${reg.name}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Stock Value</div><div class="kpi-value">${fmtPrice(stockVal)}</div><div class="kpi-sub">closing inventory</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Very High + High Criticality</div><div class="kpi-value">${vhigh+high}<span class="small"> SKUs</span></div><div class="kpi-sub">${vhigh} V.High · ${high} High</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Avg Lead Time</div><div class="kpi-value">${avgLead!=null?avgLead:'—'}<span class="small">${avgLead!=null?' days':''}</span></div><div class="kpi-sub">for ${reg.name}</div></div>
+  `;
+
+  // ── Destroy old charts ──
+  _destroyRdashCharts();
+
+  // (Charts removed — replaced by Overview Table)
+  // Chart elements no longer exist in DOM since Overview tab now shows a comprehensive table.
+
+  // ── Line Items ──
+  const itemsLabel = document.getElementById('rdash-items-label');
+  if (itemsLabel) itemsLabel.textContent = rows.length + ' Line Items — ' + reg.name;
+  const tbody = document.getElementById('rdash-tbody');
+
+  if(rows.length===0){
+    tbody.innerHTML='';
+    document.getElementById('rdash-empty').style.display='block';
+  } else {
+    document.getElementById('rdash-empty').style.display='none';
+    tbody.innerHTML = rows.map(r=>{
+      const info = r.regions?.[reg.key]||{};
+      const stockCls = r.closing_stock==null?'num muted':'num';
+      return `<tr>
+        <td class="sku">${r.sku}</td>
+        <td class="desc">${r.description}</td>
+        <td class="vendor-cell">${vendorCell(info.vendor,info.vendor_alt)}</td>
+        <td class="${info.lead_time==null?'num muted':'num'}">${info.lead_time!=null?info.lead_time+' <span class="unit">d</span>':'—'}</td>
+        <td>${reorderPill(info.str_reorder||r.str_reorder_type)}</td>
+        <td class="${info.consumption_3mo==null?'num muted':'num'}">${fmtConsumption(info.consumption_3mo)} ${info.consumption_3mo!=null&&r.uom?'<span class="unit">'+r.uom+'</span>':''}</td>
+        <td>${critPill(r.criticality)}</td>
+        <td class="${stockCls}">${fmtNum(r.closing_stock)}</td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+// ── Switch to region dashboard ──
+function showRegionDashboard(regionKey){
+  state.region = regionKey;
+  state.view = 'region';
+  document.getElementById('table-view').classList.add('hidden');
+  document.getElementById('analytics-view').classList.remove('active');
+  document.getElementById('region-view').classList.add('active');
+  syncTabs();
+  renderRegionDashboard(regionKey);
+}
+
+// ── Back button ──
+document.getElementById('rdash-back').addEventListener('click',()=>{
+  state.region = null;
+  state.view = 'table';
+  document.getElementById('region-view').classList.remove('active');
+  document.getElementById('table-view').classList.remove('hidden');
+  document.getElementById('analytics-view').classList.remove('active');
+  _destroyRdashCharts();
+  syncTabs();
+  renderTable();
+});
+
+
+/* ══ REGION PIVOT TABLES ═════════════════════════════════════════ */
+
+function _renderCategorySummary(rows){
+  const m = {};
+  rows.forEach(r=>{
+    const k = r.major_category||'Other';
+    if(!m[k]) m[k] = {count:0, stockVal:0, cons:0, stockQty:0};
+    m[k].count++;
+    m[k].stockVal += (r.closing_stock||0)*(r.unit_price||0);
+    m[k].cons += r.consumption_month||0;
+    m[k].stockQty += r.closing_stock||0;
+  });
+  const rows2 = Object.entries(m).sort((a,b)=>b[1].stockVal-a[1].stockVal);
+  const total = {count:0,stockVal:0,cons:0,stockQty:0};
+  rows2.forEach(([_,v])=>{total.count+=v.count;total.stockVal+=v.stockVal;total.cons+=v.cons;total.stockQty+=v.stockQty});
+  const maxVal = Math.max(...rows2.map(r=>r[1].stockVal), 1);
+
+  document.getElementById('cat-summary-table').innerHTML = `
+    <thead><tr>
+      <th>Category</th>
+      <th class="num">SKU Count</th>
+      <th class="num">Stock Qty</th>
+      <th class="num">Stock Value</th>
+      <th class="num">% of Value</th>
+      <th class="num">Monthly Consumption</th>
+    </tr></thead>
+    <tbody>
+      ${rows2.map(([k,v])=>`<tr>
+        <td class="label">${k}</td>
+        <td class="num">${v.count}</td>
+        <td class="num">${fmtNum(v.stockQty)}</td>
+        <td class="num">${fmtPrice(v.stockVal)}</td>
+        <td class="num">${total.stockVal>0?((v.stockVal/total.stockVal)*100).toFixed(1):0}%</td>
+        <td class="num">${fmtConsumption(v.cons)}</td>
+      </tr>`).join('')}
+      <tr class="total-row">
+        <td class="label">Total</td>
+        <td class="num">${total.count}</td>
+        <td class="num">${fmtNum(total.stockQty)}</td>
+        <td class="num">${fmtPrice(total.stockVal)}</td>
+        <td class="num">100%</td>
+        <td class="num">${fmtConsumption(total.cons)}</td>
+      </tr>
+    </tbody>`;
+}
+
+function _renderReorderSummary(rows, regionKey){
+  const m = {};
+  rows.forEach(r=>{
+    const k = r.regions?.[regionKey]?.str_reorder||r.str_reorder_type||'(Blank)';
+    if(!m[k]) m[k] = {count:0, stockVal:0, cons:0};
+    m[k].count++;
+    m[k].stockVal += (r.closing_stock||0)*(r.unit_price||0);
+    m[k].cons += r.consumption_month||0;
+  });
+  const rows2 = Object.entries(m).sort((a,b)=>b[1].count-a[1].count);
+  const total = {count:0,stockVal:0,cons:0};
+  rows2.forEach(([_,v])=>{total.count+=v.count;total.stockVal+=v.stockVal;total.cons+=v.cons});
+
+  document.getElementById('reorder-summary-table').innerHTML = `
+    <thead><tr>
+      <th>Reorder Type</th>
+      <th class="num">SKU Count</th>
+      <th class="num">% of Total</th>
+      <th class="num">Stock Value</th>
+      <th class="num">Monthly Consumption</th>
+    </tr></thead>
+    <tbody>
+      ${rows2.map(([k,v])=>`<tr>
+        <td class="label">${reorderPill(k)}</td>
+        <td class="num">${v.count}</td>
+        <td class="num">${total.count>0?((v.count/total.count)*100).toFixed(1):0}%</td>
+        <td class="num">${fmtPrice(v.stockVal)}</td>
+        <td class="num">${fmtConsumption(v.cons)}</td>
+      </tr>`).join('')}
+      <tr class="total-row">
+        <td class="label">Total</td>
+        <td class="num">${total.count}</td>
+        <td class="num">100%</td>
+        <td class="num">${fmtPrice(total.stockVal)}</td>
+        <td class="num">${fmtConsumption(total.cons)}</td>
+      </tr>
+    </tbody>`;
+}
+
+function _renderPrioritySummary(rows){
+  const order = [
+    {key:'V.High', label:'Very High', cls:'red'},
+    {key:'High', label:'High', cls:'orange'},
+    {key:'Med', label:'Medium', cls:''},
+    {key:'Low', label:'Low', cls:'green'}
+  ];
+  const m = {};
+  order.forEach(o=>m[o.key]={count:0,stockVal:0,cons:0,stockQty:0});
+  rows.forEach(r=>{
+    if(m[r.criticality]){
+      m[r.criticality].count++;
+      m[r.criticality].stockVal += (r.closing_stock||0)*(r.unit_price||0);
+      m[r.criticality].cons += r.consumption_month||0;
+      m[r.criticality].stockQty += r.closing_stock||0;
+    }
+  });
+  const total = {count:0,stockVal:0,cons:0,stockQty:0};
+  order.forEach(o=>{total.count+=m[o.key].count;total.stockVal+=m[o.key].stockVal;total.cons+=m[o.key].cons;total.stockQty+=m[o.key].stockQty});
+
+  document.getElementById('priority-summary-table').innerHTML = `
+    <thead><tr>
+      <th>Criticality Level</th>
+      <th class="num">SKU Count</th>
+      <th class="num">% of Total</th>
+      <th class="num">Stock Qty</th>
+      <th class="num">Stock Value</th>
+      <th class="num">Monthly Consumption</th>
+    </tr></thead>
+    <tbody>
+      ${order.map(o=>`<tr>
+        <td class="label">${critPill(o.key)}</td>
+        <td class="num">${m[o.key].count}</td>
+        <td class="num">${total.count>0?((m[o.key].count/total.count)*100).toFixed(1):0}%</td>
+        <td class="num">${fmtNum(m[o.key].stockQty)}</td>
+        <td class="num">${fmtPrice(m[o.key].stockVal)}</td>
+        <td class="num">${fmtConsumption(m[o.key].cons)}</td>
+      </tr>`).join('')}
+      <tr class="total-row">
+        <td class="label">Total</td>
+        <td class="num">${total.count}</td>
+        <td class="num">100%</td>
+        <td class="num">${fmtNum(total.stockQty)}</td>
+        <td class="num">${fmtPrice(total.stockVal)}</td>
+        <td class="num">${fmtConsumption(total.cons)}</td>
+      </tr>
+    </tbody>`;
+}
+
+function _renderLowStockAlert(rows, regionKey){
+  // Build vm_params lookup from already-loaded data (need min/max)
+  // Items where closing_stock < min_qty are alerts
+  const alerts = [];
+  rows.forEach(r=>{
+    const stock = r.closing_stock;
+    const minQ = r._min_qty;
+    const maxQ = r._max_qty;
+    if(stock==null || minQ==null) return;
+    if(stock < minQ){
+      const severity = stock===0 ? 'critical' : (stock < minQ*0.5 ? 'warn' : 'low');
+      alerts.push({r, stock, minQ, maxQ, severity, gap:minQ-stock});
+    }
+  });
+  alerts.sort((a,b)=>{
+    const order = {critical:0,warn:1,low:2};
+    if(order[a.severity]!==order[b.severity]) return order[a.severity]-order[b.severity];
+    return b.gap-a.gap;
+  });
+
+  document.getElementById('lowstock-badge').textContent = alerts.length;
+
+  if(alerts.length===0){
+    document.getElementById('lowstock-table').innerHTML='';
+    document.getElementById('lowstock-empty').style.display='block';
+    return;
+  }
+  document.getElementById('lowstock-empty').style.display='none';
+
+  document.getElementById('lowstock-table').innerHTML = `
+    <thead><tr>
+      <th>SKU</th>
+      <th>Description</th>
+      <th>Status</th>
+      <th class="num">Current Stock</th>
+      <th class="num">Min Qty</th>
+      <th class="num">Max Qty</th>
+      <th class="num">Shortage</th>
+      <th>Criticality</th>
+      <th>Reorder Type</th>
+    </tr></thead>
+    <tbody>
+      ${alerts.map(a=>{
+        const sevLabel = a.severity==='critical'?'OUT OF STOCK':a.severity==='warn'?'CRITICAL LOW':'BELOW MIN';
+        const sevCls = a.severity==='critical'?'':a.severity==='warn'?'warn':'';
+        return `<tr>
+          <td class="sku">${a.r.sku}</td>
+          <td class="desc">${a.r.description}</td>
+          <td><span class="alert-pill ${sevCls}">${sevLabel}</span></td>
+          <td class="num" style="color:${a.severity==='critical'?'#B91C1C':a.severity==='warn'?'#B45309':'#374151'};font-weight:700">${fmtNum(a.stock)}</td>
+          <td class="num">${fmtNum(a.minQ)}</td>
+          <td class="num muted">${fmtNum(a.maxQ)}</td>
+          <td class="num" style="color:#B91C1C;font-weight:600">${fmtNum(a.gap)}</td>
+          <td>${critPill(a.r.criticality)}</td>
+          <td>${reorderPill(a.r.regions?.[regionKey]?.str_reorder||a.r.str_reorder_type)}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>`;
+}
+
+// Subtab switching
+document.body.addEventListener('click', function(e){
+  const tab = e.target.closest('.rdash-subtab');
+  if(!tab) return;
+  document.querySelectorAll('.rdash-subtab').forEach(t=>t.classList.toggle('active', t===tab));
+  const target = tab.dataset.rtab;
+  document.querySelectorAll('.rdash-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('rpanel-'+target).classList.add('active');
+});
+
+// Hook into renderRegionDashboard to also render all pivot tables
+const _origRenderRegion = renderRegionDashboard;
+renderRegionDashboard = function(regionKey){
+  _origRenderRegion(regionKey);
+
+  // Get the same filtered rows
+  const reg = REGIONS.find(r=>r.key===regionKey);
+  const rows = DATA.filter(r=>{
+    if(state.status==='Active' && (isDiscontinued(r)||!r.str_reorder_type||String(r.str_reorder_type).trim()==='')) return false;
+    return r[reg.flag] && r[reg.flag]!=='Discontinued';
+  });
+
+  _renderCategorySummary(rows);
+  _renderReorderSummary(rows, regionKey);
+  _renderPrioritySummary(rows);
+  _renderLowStockAlert(rows, regionKey);
+
+  // Reset to overview tab on new region load
+  document.querySelectorAll('.rdash-subtab').forEach(t=>t.classList.toggle('active', t.dataset.rtab==='overview'));
+  document.querySelectorAll('.rdash-panel').forEach(p=>p.classList.toggle('active', p.id==='rpanel-overview'));
+};
+
+
+/* ══ AUTO-REFRESH every 30 seconds (silent) ══════════════════════ */
+(function() {
+  let _refreshInProgress = false;
+  
+  async function silentRefresh() {
+    if (_refreshInProgress) return;
+    _refreshInProgress = true;
+    try {
+      // Only re-read the small, frequently-changing live_stock collection
+      // (re-reading all materials/vm/cons every cycle would burn the Firestore quota)
+      let live = [];
+      try { live = await _fetchAll('live_stock'); } catch(e){ console.warn('live_stock refresh skipped:', e.message); }
+      const liveMap = {}; live.forEach(r => liveMap[r._id] = r);
+
+      // Update stock + adjustment fields on existing rows in place
+      DATA.forEach(row => {
+        const ls = liveMap[row.sku];
+        if (!ls) return;
+        row.closing_stock = (ls.closing_stock != null) ? parseFloat(ls.closing_stock) : null;
+        row.adjustment = parseFloat(ls.adjustment) || 0;
+        row.adjusted_count = (row.adjustment === 0) ? null : ((row.closing_stock || 0) + row.adjustment);
+        row.synced_at = ls.synced_at || null;
+      });
+
+      const expandedSkus = [];
+      document.querySelectorAll('tr.detail-row').forEach(dr => {
+        if (dr.style.display !== 'none') {
+          const idx = dr.getAttribute('data-idx-detail');
+          const mainRow = document.querySelector('tr[data-idx="'+idx+'"]');
+          const skuCell = mainRow && mainRow.querySelector('.sku');
+          if (skuCell) expandedSkus.push(skuCell.textContent.trim());
+        }
+      });
+
+      if (state.view === 'analytics') { renderAnalytics(); } else { renderTable(); }
+
+      if (expandedSkus.length > 0) {
+        setTimeout(() => {
+          expandedSkus.forEach(sku => {
+            const allRows = document.querySelectorAll('tr[data-idx]');
+            for (const row of allRows) {
+              const skuCell = row.querySelector('.sku');
+              if (skuCell && skuCell.textContent.trim() === sku) { row.click(); break; }
+            }
+          });
+        }, 100);
+      }
+    } catch(err) {
+      console.error('Auto-refresh failed:', err);
+    } finally {
+      _refreshInProgress = false;
+    }
+  }
+
+  // Start auto-refresh after initial load (every 30 seconds)
+  // Auto-refresh disabled — data is cached daily; use the manual Refresh button instead.
+  // (was: setInterval(silentRefresh, 600000))
+})();
+
+
+
+
+/* ══════════════════════════════════════════════════════════════
+   BULK UPLOAD  — download template, upload filled file, preview, save
+   Upserts by SKU: existing SKU updates; new SKU is added.
+   Writes to materials + vm_classification (consumption left as-is).
+   ══════════════════════════════════════════════════════════════ */
+
+// Header (in template)  ->  {collection, field}
+const UPLOAD_MAP = {
+  "SKU":                          { c:"materials", f:"sku" },
+  "Material Description":         { c:"materials", f:"material_description" },
+  "UOM":                          { c:"materials", f:"uom" },
+  "Material Category Desc":       { c:"materials", f:"material_category_desc" },
+  "Category":                     { c:"materials", f:"category" },
+  "Major Category":               { c:"materials", f:"major_category" },
+  "Classification":               { c:"materials", f:"classification" },
+  "Type":                         { c:"materials", f:"type" },
+  "Criticality":                  { c:"materials", f:"criticality" },
+  "Season":                       { c:"materials", f:"season" },
+  "Cat Manager":                  { c:"materials", f:"cat_mgr" },
+  "Reorder Type":                 { c:"materials", f:"str_reorder_type" },
+  "BLR (B / blank)":              { c:"materials", f:"blr" },
+  "CHN (C / blank)":              { c:"materials", f:"chn" },
+  "HYD (H / blank)":              { c:"materials", f:"hyd" },
+  "PUN (P / blank)":              { c:"materials", f:"pun" },
+  "NCR (D / blank)":              { c:"materials", f:"ncr" },
+  "BLR Vendor (Name-LeadTime)":   { c:"materials", f:"blr_v1" },
+  "NCR Vendor":                   { c:"materials", f:"ncr_v1" },
+  "NCR Lead Time":                { c:"materials", f:"ncr_lead_time", num:true },
+  "HYD Vendor":                   { c:"materials", f:"hyd_v1" },
+  "HYD Lead Time":                { c:"materials", f:"hyd_lead_time", num:true },
+  "CHN Vendor":                   { c:"materials", f:"chn_v1" },
+  "CHN Lead Time":                { c:"materials", f:"chn_lead_time", num:true },
+  "Supplier MOQ":                 { c:"materials", f:"supplier_moq", num:true },
+  "Unit Price":                   { c:"materials", f:"unit_price", num:true },
+  "Consumption Per Month":        { c:"vm_classification", f:"consumption_per_month", num:true },
+  "Order Frequency":              { c:"vm_classification", f:"ord_freq", num:true },
+  "Min Qty":                      { c:"vm_classification", f:"min_qty", num:true },
+  "Max Qty":                      { c:"vm_classification", f:"max_qty", num:true },
+  "BLR Vendor 2":                 { c:"materials", f:"blr_v2" },
+  "NCR Vendor 2":                 { c:"materials", f:"ncr_v2" },
+  "CHN Vendor 2":                 { c:"materials", f:"chn_v2" },
+  "BLR HUB Capacity":             { c:"materials", f:"blr_hub_capacity", num:true },
+  "Distrbn MOQ":                  { c:"materials", f:"min_distrbn_qty", num:true },
+  "Ratelist Name":                { c:"materials", f:"ratelist_name" },
+  "Seasonal Consumption":         { c:"vm_classification", f:"seasonal_consumption", num:true },
+  "Launch Start Date":            { c:"materials", f:"launch_start" },
+  "Launch End Date":              { c:"materials", f:"launch_end" },
+};
+const TEMPLATE_HEADERS = Object.keys(UPLOAD_MAP);
+const VALID_CRITICALITY = ["V.High","High","Med","Low"];
+
+let _uploadParsed = null;   // holds parsed+validated rows awaiting confirm
+
+function _uploadModalHTML() {
+  return `
+  <div id="upload-modal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2100;align-items:center;justify-content:center">
+    <div style="background:var(--bg);border-radius:8px;max-width:760px;width:94%;max-height:90vh;overflow:auto;box-shadow:var(--shadow-lg)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--border)">
+        <div style="font-weight:700;color:var(--navy)">Bulk Upload Materials</div>
+        <button onclick="document.getElementById('upload-modal').style.display='none'" style="border:none;background:none;font-size:22px;cursor:pointer;color:var(--text-3)">&times;</button>
+      </div>
+      <div style="padding:22px" id="upload-body">
+        <ol style="font-size:13px;color:var(--text-2);line-height:1.7;margin:0 0 16px 18px;padding:0">
+          <li>Download the template and fill one row per material (SKU is required).</li>
+          <li>Existing SKU = update · New SKU = added.</li>
+          <li>Upload the file — you'll see a preview before anything is saved.</li>
+        </ol>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px">
+          <button id="dl-template" class="btn">⬇ Download Template</button>
+          <label class="btn primary" style="cursor:pointer">⬆ Choose File
+            <input id="upload-file" type="file" accept=".xlsx,.xls,.csv" style="display:none">
+          </label>
+          <span id="upload-filename" style="font-size:12px;color:var(--text-3)"></span>
+        </div>
+        <div id="upload-preview"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _downloadTemplate() {
+  const sample = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,15,30,5,19,"","","",1000,10,"RL-2024",25,"2024-04-01","2024-12-31"];
+  const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, sample]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Materials Upload");
+  XLSX.writeFile(wb, "material_upload_template.xlsx");
+}
+
+function _toNum(v){ if(v===''||v==null) return null; const n=parseFloat(String(v).replace(/,/g,'')); return isNaN(n)?v:n; }
+
+function _parseUpload(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let rows;
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+    } catch(err){ _showUploadError('Could not read the file: '+err.message); return; }
+
+    if (!rows.length) { _showUploadError('The file has no data rows.'); return; }
+
+    // Validate headers
+    const fileHeaders = Object.keys(rows[0]);
+    const missingKey = !fileHeaders.includes('SKU');
+    if (missingKey) { _showUploadError('The file must have a "SKU" column. Please use the template.'); return; }
+
+    const existingSkus = new Set(DATA.map(r => r.sku));
+    const parsed = [], errors = [], warnings = [];
+    let updates=0, news=0;
+
+    rows.forEach((row, i) => {
+      const sku = String(row['SKU']||'').trim();
+      const rowNum = i+2;
+      if (!sku) { errors.push(`Row ${rowNum}: missing SKU`); return; }
+      // skip the grey example row if left in
+      if (sku === 'ACRPRP1' && String(row['Material Description']||'').startsWith('Acrylic Baggage Tag Clear 2mm 85mmx55mm') && rows.length>1 && i===0) {
+        // only skip if it's clearly the untouched sample; keep otherwise
+      }
+      const crit = String(row['Criticality']||'').trim();
+      if (crit && !VALID_CRITICALITY.includes(crit)) {
+        errors.push(`Row ${rowNum} (${sku}): Criticality "${crit}" invalid — use V.High/High/Med/Low`);
+      }
+      const isNew = !existingSkus.has(sku);
+      const today = new Date().toISOString().slice(0,10);
+      let launchStartVal = String(row['Launch Start Date']||'').trim();
+      const launchEndVal = String(row['Launch End Date']||'').trim();
+      // Launch Start: if blank, auto-fill today + warn
+      if (!launchStartVal) {
+        launchStartVal = today;
+        warnings.push(`Row ${rowNum} (${sku}): Launch Start Date was blank — set to today (${today})`);
+        row['Launch Start Date'] = today;  // so it flows into matDoc below
+      }
+      // Launch End: if blank, warn but allow (editable later in UI)
+      if (!launchEndVal) {
+        warnings.push(`Row ${rowNum} (${sku}): Launch End Date is blank — add it later in the tool`);
+      }
+      // Build per-collection field objects
+      const matDoc = {}, vmDoc = {};
+      TEMPLATE_HEADERS.forEach(h => {
+        if (!(h in row)) return;
+        const map = UPLOAD_MAP[h];
+        let val = row[h];
+        if (typeof val === 'string') val = val.trim();
+        if (val === '') val = null;
+        if (map.num && val != null) val = _toNum(val);
+        if (map.c === 'materials') matDoc[map.f] = val;
+        else if (map.c === 'vm_classification') vmDoc[map.f] = val;
+      });
+      matDoc.sku = sku; vmDoc.sku = sku;
+      const isUpdate = existingSkus.has(sku);
+      isUpdate ? updates++ : news++;
+      parsed.push({ sku, isUpdate, matDoc, vmDoc });
+    });
+
+    _uploadParsed = parsed;
+    _renderUploadPreview(parsed.length, updates, news, errors, warnings);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function _showUploadError(msg){
+  document.getElementById('upload-preview').innerHTML =
+    `<div style="background:var(--red-soft);color:var(--red);padding:12px 14px;border-radius:6px;font-size:13px">${msg}</div>`;
+}
+
+function _renderUploadPreview(total, updates, news, errors, warnings) {
+  warnings = warnings || [];
+  const box = document.getElementById('upload-preview');
+  const canSave = total>0;
+  box.innerHTML = `
+    <div style="border-top:1px solid var(--border);padding-top:16px">
+      <div style="font-weight:700;color:var(--text-2);font-size:12px;text-transform:uppercase;margin-bottom:10px">Preview</div>
+      <div style="display:flex;gap:10px;margin-bottom:14px">
+        <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">TOTAL ROWS</div><div style="font-size:22px;font-weight:700;color:var(--navy)">${total}</div></div>
+        <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">WILL UPDATE</div><div style="font-size:22px;font-weight:700;color:var(--orange)">${updates}</div></div>
+        <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">NEW ITEMS</div><div style="font-size:22px;font-weight:700;color:var(--green)">${news}</div></div>
+        <div style="flex:1;background:${errors.length?'var(--red-soft)':'var(--surface)'};border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">ERRORS</div><div style="font-size:22px;font-weight:700;color:${errors.length?'var(--red)':'var(--text-4)'}">${errors.length}</div></div>
+      </div>
+      ${errors.length?`<div style="background:var(--red-soft);color:var(--red);padding:10px 12px;border-radius:6px;font-size:12px;max-height:140px;overflow:auto;margin-bottom:10px">${errors.slice(0,50).map(e=>`<div>${e}</div>`).join('')}${errors.length>50?`<div>…and ${errors.length-50} more</div>`:''}</div>`:''}
+      ${warnings.length?`<div style="background:#FFF4E0;color:#854F0B;padding:10px 12px;border-radius:6px;font-size:12px;max-height:120px;overflow:auto;margin-bottom:14px"><b>Warnings (allowed):</b>${warnings.slice(0,30).map(w=>`<div>${w}</div>`).join('')}${warnings.length>30?`<div>…and ${warnings.length-30} more</div>`:''}</div>`:''}
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="upload-confirm" class="btn primary" ${canSave?'':'disabled style="opacity:.5;cursor:not-allowed"'}>Confirm & Save ${total} rows</button>
+        <span id="upload-msg" style="font-size:12px"></span>
+      </div>
+      ${errors.length?`<div style="font-size:11px;color:var(--text-4);margin-top:8px">Rows with errors will still save the valid fields; fix Criticality values in your file and re-upload if needed.</div>`:''}
+    </div>`;
+}
+
+async function _saveUpload() {
+  if (!_uploadParsed || !_uploadParsed.length) return;
+  const msg = document.getElementById('upload-msg');
+  const btn = document.getElementById('upload-confirm');
+  btn.disabled = true; btn.style.opacity = '.5';
+  msg.style.color = 'var(--text-3)'; msg.textContent = 'Saving…';
+
+  const { doc, writeBatch } = window._fsApi;
+  try {
+    let batch = writeBatch(window._FS), ops = 0, done = 0;
+    for (const row of _uploadParsed) {
+      // materials doc (merge so we don't wipe untouched fields)
+      const mref = doc(window._FS, 'materials', row.sku);
+      const matClean = {}; Object.keys(row.matDoc).forEach(k => { if (row.matDoc[k] !== null || k==='sku') matClean[k]=row.matDoc[k]; });
+      batch.set(mref, matClean, { merge: true }); ops++;
+      // vm_classification doc
+      const vref = doc(window._FS, 'vm_classification', row.sku);
+      const vmClean = {}; Object.keys(row.vmDoc).forEach(k => { if (row.vmDoc[k] !== null || k==='sku') vmClean[k]=row.vmDoc[k]; });
+      if (Object.keys(vmClean).length > 1) { batch.set(vref, vmClean, { merge: true }); ops++; }
+
+      if (ops >= 400) { await batch.commit(); done += ops; msg.textContent = `Saved ${done}…`; batch = writeBatch(window._FS); ops = 0; }
+    }
+    if (ops > 0) { await batch.commit(); done += ops; }
+
+    msg.style.color = 'var(--green)';
+    msg.textContent = `Done — saved ${_uploadParsed.length} rows. Click Refresh data to see changes.`;
+    // clear cache so next refresh shows new data
+    try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+  } catch(err) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Error: ' + err.message;
+    btn.disabled = false; btn.style.opacity = '1';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.body.insertAdjacentHTML('beforeend', _uploadModalHTML());
+  const openBtn = document.getElementById('bulk-upload-btn');
+  if (openBtn) openBtn.addEventListener('click', () => {
+    _uploadParsed = null;
+    document.getElementById('upload-preview').innerHTML = '';
+    document.getElementById('upload-filename').textContent = '';
+    document.getElementById('upload-modal').style.display = 'flex';
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'dl-template') _downloadTemplate();
+    if (e.target && e.target.id === 'upload-confirm') _saveUpload();
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'upload-file' && e.target.files.length) {
+      document.getElementById('upload-filename').textContent = e.target.files[0].name;
+      _parseUpload(e.target.files[0]);
+    }
+  });
+});
+
+
+/* ── MANUAL REFRESH (clears daily cache, re-reads Firestore once) ── */
+(function(){
+  function updateCacheStatus(){
+    try {
+      const raw = localStorage.getItem('printo_mat_cache_v1');
+      const el = document.getElementById('cache-status');
+      if (!el) return;
+      if (raw) {
+        const obj = JSON.parse(raw);
+        el.textContent = 'Data as of ' + (obj.date || 'today');
+      } else { el.textContent = ''; }
+    } catch(e){}
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    updateCacheStatus();
+    const btn = document.getElementById('refresh-data-btn');
+    if (btn) btn.addEventListener('click', () => {
+      if (confirm('Reload the latest data from the database? This uses database reads.')) {
+        try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+        location.reload();
+      }
+    });
+  });
+})();
+
+/* ══ REGION OVERVIEW TABLE ════════════════════════════════════════ */
+let _overviewRows = []; // Current rows for the region
+let _overviewFilter = '';
+
+function _renderOverviewTable(rows, regionKey) {
+  _overviewRows = rows;
+  _overviewFilter = '';
+  const searchEl = document.getElementById('overview-search');
+  if (searchEl) searchEl.value = '';
+  _redrawOverviewTable(regionKey);
+}
+
+function _redrawOverviewTable(regionKey) {
+  const q = _overviewFilter.toLowerCase();
+  const filtered = q ? _overviewRows.filter(r => 
+    r.sku.toLowerCase().includes(q) || (r.description||'').toLowerCase().includes(q)
+  ) : _overviewRows;
+
+  document.getElementById('overview-count').textContent = filtered.length + ' items' + (q ? ' (filtered from ' + _overviewRows.length + ')' : '');
+  
+  const tbody = document.getElementById('overview-tbody');
+  const empty = document.getElementById('overview-empty');
+  
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = filtered.map(r => {
+    const info = r.regions?.[regionKey] || {};
+    const reorderVal = info.str_reorder || r.str_reorder_type;
+    const cities = REGIONS.map(c => {
+      const v = r[c.flag];
+      if (v === 'Discontinued') return '<span class="city discon">' + c.label + '</span>';
+      if (v) return '<span class="city on">' + c.label + '</span>';
+      return '<span class="city">' + c.label + '</span>';
+    }).join('');
+    
+    return '<tr>' +
+      '<td class="sku" style="font-family:var(--mono);color:var(--navy);font-weight:600">' + r.sku + '</td>' +
+      '<td>' + r.description + '</td>' +
+      '<td>' + (r.uom||'—') + '</td>' +
+      '<td style="font-size:11.5px">' + (r.major_category||'') + (r.category ? ' / ' + r.category : '') + '</td>' +
+      '<td><div class="cities" style="display:flex;gap:2px">' + cities + '</div></td>' +
+      '<td>' + critPill(r.criticality) + '</td>' +
+      '<td class="num' + (r.closing_stock==null?' muted':'') + '">' + fmtNum(r.closing_stock) + '</td>' +
+      '<td class="num">' + fmtConsumption(r.consumption_month) + '</td>' +
+      '<td>' + reorderPill(reorderVal) + '</td>' +
+      '<td class="num">' + fmtNum(r.min_qty) + '</td>' +
+      '<td class="num">' + fmtNum(r.max_qty) + '</td>' +
+      '<td class="num">' + (info.lead_time!=null?info.lead_time+'d':'—') + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+// Search input handler
+document.body.addEventListener('input', function(e) {
+  if (e.target.id === 'overview-search') {
+    _overviewFilter = e.target.value.trim();
+    // Get current region from state
+    if (state.region && !['all','multi','single'].includes(state.region)) {
+      _redrawOverviewTable(state.region);
+    }
+  }
+});
+
+// Export handler
+document.body.addEventListener('click', function(e) {
+  if (e.target.id === 'overview-export' || e.target.closest('#overview-export')) {
+    const regionKey = state.region;
+    if (!regionKey) return;
+    const reg = REGIONS.find(r => r.key === regionKey);
+    const q = _overviewFilter.toLowerCase();
+    const filtered = q ? _overviewRows.filter(r => 
+      r.sku.toLowerCase().includes(q) || (r.description||'').toLowerCase().includes(q)
+    ) : _overviewRows;
+    
+    const headers = ['SKU','Description','UOM','Major Category','Sub Category','Cities','Criticality','Stock','Cons/Month','Reorder Type','Min Qty','Max Qty','Lead Time'];
+    const rows = filtered.map(r => {
+      const info = r.regions?.[regionKey] || {};
+      const reorderVal = info.str_reorder || r.str_reorder_type;
+      const cityList = [r.blr?'BLR':'',r.chn?'CHN':'',r.hyd?'HYD':'',r.pun?'PUN':'',r.ncr?'NCR':''].filter(Boolean).join('/');
+      return [r.sku,r.description,r.uom||'',r.major_category||'',r.category||'',cityList,r.criticality||'',r.closing_stock||0,r.consumption_month||0,reorderVal||'',r.min_qty||0,r.max_qty||0,info.lead_time||''];
+    });
+    const csv = [headers, ...rows].map(row => 
+      row.map(v => '"' + String(v||'').replace(/"/g,'""') + '"').join(',')
+    ).join('\n');
+    
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'printo_' + (reg ? reg.name.toLowerCase().replace(/\s/g,'_') : 'region') + '_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+  }
+});
+
+// Hook into renderRegionDashboard to populate overview table
+const _origRenderRegion2 = renderRegionDashboard;
+renderRegionDashboard = function(regionKey) {
+  _origRenderRegion2(regionKey);
+  
+  const reg = REGIONS.find(r => r.key === regionKey);
+  if (!reg) return;
+  const rows = DATA.filter(r => {
+    if (state.status === 'Active' && (isDiscontinued(r) || !r.str_reorder_type || String(r.str_reorder_type).trim() === '')) return false;
+    return r[reg.flag] && r[reg.flag] !== 'Discontinued';
+  });
+  _renderOverviewTable(rows, regionKey);
+};
+
+
+</script>
