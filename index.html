@@ -9,6 +9,58 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+  /* ===== EMAIL NOTIFICATIONS (EmailJS) =====================================
+     Fill in your 3 EmailJS values below. Get them from emailjs.com:
+       - Public Key:  Account -> General
+       - Service ID:  Email Services
+       - Template ID: Email Templates
+     The template should use these variables:
+       {{user_name}} {{change_type}} {{change_time}} {{change_details}}
+     Set the template's "To Email" to your procurement address(es).
+  ========================================================================= */
+  const EMAILJS_PUBLIC_KEY = "PASTE_PUBLIC_KEY_HERE";
+  const EMAILJS_SERVICE_ID = "PASTE_SERVICE_ID_HERE";
+  const EMAILJS_TEMPLATE_ID = "PASTE_TEMPLATE_ID_HERE";
+  const EMAIL_NOTIFY_ENABLED = true;  // set false to turn off emails
+
+  let _emailReady = false;
+  try {
+    if (window.emailjs && EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith("PASTE")) {
+      emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+      _emailReady = true;
+    }
+  } catch(e) { console.warn("EmailJS init failed:", e.message); }
+
+  // Remembers the user's name (no login yet) in this browser
+  function _getUserName() {
+    let n = "";
+    try { n = localStorage.getItem("printo_mat_username") || ""; } catch(e){}
+    if (!n) {
+      n = (prompt("Your name (for change notifications to Procurement):") || "").trim();
+      if (n) { try { localStorage.setItem("printo_mat_username", n); } catch(e){} }
+    }
+    return n || "Unknown user";
+  }
+
+  // Sends a notification email. changeType: "Bulk Upload" | "Item Edit" | "New Item"
+  async function notifyProcurement(changeType, detailsText) {
+    if (!EMAIL_NOTIFY_ENABLED) return;
+    if (!_emailReady) { console.warn("Email not configured — skipping notification."); return; }
+    try {
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+        user_name: _getUserName(),
+        change_type: changeType,
+        change_time: new Date().toLocaleString("en-IN"),
+        change_details: detailsText
+      });
+      console.log("Procurement notified:", changeType);
+    } catch(e) {
+      console.warn("Email send failed:", e?.text || e?.message || e);
+    }
+  }
+</script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, query, where, runTransaction, writeBatch }
@@ -1593,8 +1645,10 @@ function computeAdjusted(closing, adjustment) {
       let minQty = null, maxQty = null;
       const _haveInputs = !isNaN(consumptionPerMonth);
       if (_haveInputs) {
+        // Both Min and Max use Uncertainty buffer (Min) = S, per the source sheet formula:
+        //   Max = CEILING.MATH( ((N+J)/30)*U + R + N*S , L )   where S = Uncertainty(Min)
         const minRaw = ((_N + _J) / 30 + _R) + (_N * _Smin);
-        const maxRaw = ((_N + _J) / 30 * _U + _R) + (_N * _Smax);
+        const maxRaw = ((_N + _J) / 30 * _U + _R) + (_N * _Smin);
         minQty = (minRaw <= 0) ? 0 : _ceilMath(minRaw, _L);
         maxQty = (maxRaw <= 0) ? 0 : _ceilMath(maxRaw, _L);
       }
@@ -1868,7 +1922,7 @@ function _adjModalHTML() {
         </div>
         <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px">
           <div style="flex:0 0 130px">
-            <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">Adjust stock (+/-)</label>
+            <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">Amount (+/-)</label>
             <input id="adj-amount" type="number" placeholder="e.g. 25 or -10" style="width:100%;padding:9px;border:1px solid var(--border-2);border-radius:6px;font-size:15px">
           </div>
           <div style="flex:1">
@@ -2040,6 +2094,16 @@ document.addEventListener('click', async (e) => {
     const msg = document.getElementById('edit-msg');
     msg.style.color = 'var(--text-3)'; msg.textContent = 'Saving…';
     const r = DATA.find(x => x.sku === _editSku);
+    // snapshot for change-tracking (for the notification email)
+    const _before = JSON.parse(JSON.stringify({
+      description:r.description, uom:r.uom, category:r.category, major_category:r.major_category,
+      classification:r.classification, type:r.type, criticality:r.criticality, str_reorder_type:r.str_reorder_type,
+      cat_manager:r.cat_manager, unit_price:r.unit_price, supplier_moq:r.supplier_moq,
+      min_distrbn_qty:r.min_distrbn_qty, blr_hub_capacity:r.blr_hub_capacity, season:r.season,
+      seasonal_consumption:r.seasonal_consumption, launch_start:r.launch_start, launch_end:r.launch_end,
+      ratelist_name:r.ratelist_name, product_sku:r.product_sku, blr_v2:r.blr_v2, ncr_v2:r.ncr_v2, chn_v2:r.chn_v2,
+      blr_vendor:r._blr_vendor_raw, ncr_vendor:r.regions?.NCR?.vendor, hyd_vendor:r.regions?.HYD?.vendor, chn_vendor:r.regions?.CHN?.vendor
+    }));
     try {
       const edits = [];
       // --- Material Details fields ---
@@ -2116,6 +2180,44 @@ document.addEventListener('click', async (e) => {
       await Promise.all(edits);
       msg.style.color = 'var(--green)'; msg.textContent = edits.length ? `Saved ${edits.length} change(s) ✓` : 'No changes';
       renderTable();
+
+      // Notify Procurement on edit — single email listing what changed
+      if (edits.length) {
+        try {
+          const _after = {
+            description:r.description, uom:r.uom, category:r.category, major_category:r.major_category,
+            classification:r.classification, type:r.type, criticality:r.criticality, str_reorder_type:r.str_reorder_type,
+            cat_manager:r.cat_manager, unit_price:r.unit_price, supplier_moq:r.supplier_moq,
+            min_distrbn_qty:r.min_distrbn_qty, blr_hub_capacity:r.blr_hub_capacity, season:r.season,
+            seasonal_consumption:r.seasonal_consumption, launch_start:r.launch_start, launch_end:r.launch_end,
+            ratelist_name:r.ratelist_name, product_sku:r.product_sku, blr_v2:r.blr_v2, ncr_v2:r.ncr_v2, chn_v2:r.chn_v2,
+            blr_vendor:r._blr_vendor_raw, ncr_vendor:r.regions?.NCR?.vendor, hyd_vendor:r.regions?.HYD?.vendor, chn_vendor:r.regions?.CHN?.vendor
+          };
+          const _labels = {
+            description:'Description', uom:'UOM', category:'Category', major_category:'Major Category',
+            classification:'Classification', type:'Type', criticality:'Criticality', str_reorder_type:'Reorder Type',
+            cat_manager:'Category Manager', unit_price:'Unit Price', supplier_moq:'Supplier MOQ',
+            min_distrbn_qty:'Distrbn MOQ', blr_hub_capacity:'BLR HUB Capacity', season:'Season',
+            seasonal_consumption:'Seasonal Consumption', launch_start:'Launch Start', launch_end:'Launch End',
+            ratelist_name:'Ratelist Name', product_sku:'Product SKU', blr_v2:'BLR Vendor 2', ncr_v2:'NCR Vendor 2', chn_v2:'CHN Vendor 2',
+            blr_vendor:'BLR Vendor', ncr_vendor:'NCR Vendor', hyd_vendor:'HYD Vendor', chn_vendor:'CHN Vendor'
+          };
+          const changeLines = [];
+          Object.keys(_labels).forEach(k => {
+            const a = (_before[k] ?? '') === null ? '' : (_before[k] ?? '');
+            const b = (_after[k] ?? '') === null ? '' : (_after[k] ?? '');
+            if (String(a) !== String(b)) changeLines.push(`${_labels[k]}: "${a||'—'}" → "${b||'—'}"`);
+          });
+          const details = [
+            `SKU: ${r.sku}`,
+            `Description: ${r.description || '—'}`,
+            '',
+            'Changes:',
+            ...(changeLines.length ? changeLines : ['(fields updated)'])
+          ].join('\n');
+          notifyProcurement('Item Edit', details);
+        } catch(e) { console.warn('notify (edit) failed:', e.message); }
+      }
     } catch(err) { msg.style.color = 'var(--red)'; msg.textContent = 'Error: ' + err.message; }
   }
 });
@@ -2992,6 +3094,22 @@ async function _saveUpload() {
     msg.textContent = `Done — saved ${_uploadParsed.length} rows. Click Refresh data to see changes.`;
     // clear cache so next refresh shows new data
     try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+
+    // Notify Procurement — one summary email for the whole batch
+    try {
+      const upd = _uploadParsed.filter(r => r.isUpdate);
+      const neu = _uploadParsed.filter(r => !r.isUpdate);
+      const lines = [];
+      lines.push(`Total rows: ${_uploadParsed.length}`);
+      lines.push(`Updated: ${upd.length} | New: ${neu.length}`);
+      lines.push('');
+      _uploadParsed.slice(0, 100).forEach(r => {
+        const desc = (r.matDoc && r.matDoc.material_description) ? r.matDoc.material_description : '';
+        lines.push(`${r.isUpdate ? '[UPDATED]' : '[NEW]'} ${r.sku}${desc ? ' — ' + desc : ''}`);
+      });
+      if (_uploadParsed.length > 100) lines.push(`…and ${_uploadParsed.length - 100} more`);
+      notifyProcurement('Bulk Upload', lines.join('\n'));
+    } catch(e) { console.warn('notify (bulk) failed:', e.message); }
   } catch(err) {
     msg.style.color = 'var(--red)';
     msg.textContent = 'Error: ' + err.message;
