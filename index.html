@@ -574,6 +574,8 @@
   .logout-btn:hover{background:rgba(255,255,255,.22)}
   /* hide admin-only controls for region users */
   body.role-region .admin-only{display:none !important;}
+  /* view-only team roles (commercial/inventory until fields assigned): hide edit buttons */
+  body.role-viewonly .edit-item-btn, body.role-viewonly #add-material-btn, body.role-viewonly #bulk-upload-btn{display:none !important;}
   .loading-overlay{
     position:fixed;inset:0;background:#1B3560;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -1260,7 +1262,7 @@ function rowHTML(r,idx){
     </dl>
     <div style="margin-top:12px;display:flex;gap:8px">
       <button onclick="openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Adjust Stock</button>
-      <button onclick="openEditModal('${r.sku}')" style="background:var(--surface-2);color:var(--navy);border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Edit Item</button>
+      <button class="edit-item-btn" onclick="openEditModal('${r.sku}')" style="background:var(--surface-2);color:var(--navy);border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Edit Item</button>
     </div></div>
     <div class="detail-section"><h5>Stock Parameters</h5>
     <dl class="detail-grid">
@@ -1637,9 +1639,12 @@ async function _loadUserProfile(uid, email){
     // No profile found — treat as no access (safest). Admin must add them to 'users'.
     return { uid, email, region:null, role:null, _missing:true };
   }
-  const role = (prof.role || '').toLowerCase() === 'admin' ? 'admin' : 'region';
+  const rawRole = (prof.role || '').toLowerCase().trim();
+  const VALID_ROLES = ['admin','procurement','commercial','inventory','region'];
+  const role = VALID_ROLES.includes(rawRole) ? rawRole : 'region';
   const region = prof.region ? String(prof.region).toUpperCase().trim() : null;
-  return { uid, email, region: (role==='admin' ? (region||null) : region), role };
+  // region only matters for 'region' role; team/admin roles see all regions
+  return { uid, email, region: (role==='region' ? region : (region||null)), role };
 }
 
 function _showLogin(errMsg){
@@ -1709,6 +1714,14 @@ function _applyUserAccessUI(){
     if (badge){ badge.style.display=''; badge.textContent='ADMIN'; badge.style.background='#1B3560'; }
     if (chip) chip.title = email + ' (Admin — all regions)';
     document.body.classList.add('role-admin');
+  } else if (u.role === 'procurement' || u.role === 'commercial' || u.role === 'inventory'){
+    const labels = { procurement:'PROCUREMENT', commercial:'COMMERCIAL', inventory:'INVENTORY' };
+    if (badge){ badge.style.display=''; badge.textContent=labels[u.role]; badge.style.background='#2563EB'; }
+    if (chip) chip.title = email + ' (' + labels[u.role] + ' — all regions)';
+    document.body.classList.add('role-team');
+    document.body.setAttribute('data-team', u.role);
+    // teams that are view-only (commercial/inventory for now) get an extra class
+    if (!_canEditAnything()) document.body.classList.add('role-viewonly');
   } else {
     if (badge && u.region){ badge.style.display=''; badge.textContent=u.region; }
     if (chip) chip.title = email + ' (' + (u.region||'') + ')';
@@ -1719,7 +1732,8 @@ function _applyUserAccessUI(){
   const lg = document.getElementById('logout-btn');
   if (lg) lg.addEventListener('click', _doLogout);
 
-  // Region users are locked to one region — hide the Region filter menu/tab
+  // Region users are locked to one region — hide the Region filter menu/tab.
+  // Team users (procurement/commercial/inventory) and admin keep all regions.
   if (u.role === 'region'){
     document.querySelectorAll('[data-menu="regions"], #menu-regions').forEach(el => { el.style.display='none'; });
     // Lock the active filter to their region so the table/views only ever show their region
@@ -1728,22 +1742,66 @@ function _applyUserAccessUI(){
     }
   }
 }
-
-// Permission helper used by edit/upload UI.
-function _canEditField(scope){
-  // scope: 'shared' (desc/price/criticality/...) or a region code ('BLR'...) or 'stock'
-  const u = window._USER || {};
-  if (u.role === 'admin') return true;
-  if (u.role === 'region'){
-    if (scope === 'stock') return true;                  // can adjust stock
-    if (scope === u.region) return true;                 // their region's vendor/lead/etc
-    if (scope === 'shared') return false;                // shared fields view-only
-    return false;                                        // other regions' fields: no
+// True if the user's role can edit at least one field (admin/procurement yes; commercial/inventory not yet)
+function _canEditAnything(){
+  const r = (window._USER||{}).role;
+  if (r === 'admin' || r === 'region') return true;
+  if (r === 'procurement') return true;
+  if (r === 'commercial' || r === 'inventory'){
+    return (TEAM_EDITABLE_FIELDS[r] && TEAM_EDITABLE_FIELDS[r].size > 0);
   }
   return false;
 }
-function _canBulkUpload(){ return (window._USER||{}).role === 'admin'; }
+
+// Permission helper used by edit/upload UI.
+// ===== PERMISSION SYSTEM (roles: admin / procurement / commercial / inventory / region) =====
+// Field-level edit permissions per team. Each entry is the set of *field keys* that team may edit.
+// Field keys match the logical fields used in the edit form (see _canEditField mapping below).
+const TEAM_EDITABLE_FIELDS = {
+  procurement: new Set([
+    'classification','type','material_category_desc','uom',
+    'supplier_moq','season','launch_start','launch_end','str_reorder_type',
+    'seasonal_consumption','cities',           // city flags BLR/CHN/HYD/PUN/NCR
+    'blr_vendor','chn_vendor','hyd_vendor','ncr_vendor','pun_vendor'  // Vendor (region) + Vendor Name(Short)
+  ]),
+  commercial: new Set([]),   // view-only for now (fields TBD)
+  inventory:  new Set([]),   // view-only for now (fields TBD)
+};
+
+// scope can be: a region code ('BLR'..), 'stock', 'shared', OR a specific field key.
+// We resolve everything to a decision based on the user's role.
+function _canEditField(scope, fieldKey){
+  const u = window._USER || {};
+  const role = u.role;
+  if (role === 'admin') return true;
+
+  // Region users: region-specific operational fields + stock only
+  if (role === 'region'){
+    if (scope === 'stock') return true;
+    if (scope === u.region) return true;          // their region's vendor/lead block
+    return false;                                  // everything else view-only
+  }
+
+  // Team users (procurement / commercial / inventory): field-level allow-list, all regions
+  if (role === 'procurement' || role === 'commercial' || role === 'inventory'){
+    const allow = TEAM_EDITABLE_FIELDS[role] || new Set();
+    if (scope === 'stock') return false;           // teams don't adjust stock (unless added later)
+    // Region vendor blocks: procurement can edit vendor fields (mapped via fieldKey)
+    const key = fieldKey || scope;                 // when called with a field key directly
+    // region-code scopes map to that region's vendor field
+    if (['BLR','CHN','HYD','PUN','NCR'].includes(scope)){
+      const vk = ({BLR:'blr_vendor',CHN:'chn_vendor',HYD:'hyd_vendor',NCR:'ncr_vendor',PUN:'pun_vendor'})[scope];
+      return allow.has(vk);
+    }
+    return allow.has(key);
+  }
+  return false;
+}
+// Procurement + admin can bulk upload
+function _canBulkUpload(){ const r=(window._USER||{}).role; return r === 'admin' || r === 'procurement'; }
 function _isAdmin(){ return (window._USER||{}).role === 'admin'; }
+// Does this user see all regions (admin + all team roles) or just one (region users)?
+function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'; }
 
 (async function _init() {
   try {
@@ -1767,8 +1825,13 @@ function _isAdmin(){ return (window._USER||{}).role === 'admin'; }
       if (!user) { _showLogin(); return; }
       // Logged in — load their profile (region + role)
       const profile = await _loadUserProfile(user.uid, user.email);
-      if (profile._missing || (!profile.region && profile.role !== 'admin')) {
-        // Authenticated but no region/role assigned → deny, sign out
+      const _teamRoles = ['admin','procurement','commercial','inventory'];
+      const _hasAccess = profile.role && (
+        _teamRoles.includes(profile.role) ||           // team/admin: no region needed
+        (profile.role === 'region' && profile.region)  // region user: needs a region
+      );
+      if (profile._missing || !_hasAccess) {
+        // Authenticated but no valid role/region assigned → deny, sign out
         await window._authApi.signOut(auth);
         _showLogin('Your account has no access assigned. Contact the admin.');
         return;
@@ -2296,16 +2359,18 @@ function openEditModal(sku) {
   document.getElementById('edit-title').textContent = 'Edit — ' + sku;
   document.getElementById('edit-sub').textContent = r.description || '';
   const body = document.getElementById('edit-body');
-  const _shared = _canEditField('shared');   // false for region users
+  const _u = window._USER || {};
+  // Per-field edit permission (admin: all; region: none of these shared fields; procurement: its allow-list)
+  const P = (fieldKey) => _canEditField(fieldKey);
+  // region vendor block editability
   const _eBLR = _canEditField('BLR'), _eCHN = _canEditField('CHN'), _eHYD = _canEditField('HYD'),
         _eNCR = _canEditField('NCR'), _ePUN = _canEditField('PUN');
-  // for region users, only show their own region's vendor block
-  const _u = window._USER || {};
-  const _showRegion = (code) => (_u.role === 'admin') || (_u.region === code);
+  // Which region vendor blocks to SHOW: region users see only theirs; admin + teams see all
+  const _showRegion = (code) => _seesAllRegions() || (_u.region === code);
   const _blrBlock = _showRegion('BLR') ? `
     ${_ef('BLR Vendor','ed-blr',r._blr_vendor_raw,'format: Name-LeadTime e.g. Canvera-3', _eBLR)}
     ${_ef('BLR Vendor 2','ed-blr2',r.blr_v2, '', _eBLR)}
-    ${_ef('BLR HUB Capacity','ed-hubcap',r.blr_hub_capacity, '', _eBLR)}` : '';
+    ${_ef('BLR HUB Capacity','ed-hubcap',r.blr_hub_capacity, '', _canEditField('blr_hub_capacity'))}` : '';
   const _ncrBlock = _showRegion('NCR') ? `
     ${_ef('NCR Vendor','ed-ncr',r.regions.NCR.vendor, '', _eNCR)}
     ${_ef('NCR Vendor 2','ed-ncr2',r.ncr_v2, '', _eNCR)}
@@ -2319,35 +2384,35 @@ function openEditModal(sku) {
     ${_ef('CHN Lead time (days)','ed-chn-lt',r.regions.CHN.lead_time, '', _eCHN)}` : '';
   body.innerHTML = `
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin-bottom:8px">Material Details</div>
-    ${_ef('Material Description','ed-desc',r.description, '', _shared)}
-    ${_ef('UOM','ed-uom',r.uom, '', _shared)}
-    ${_ef('Material Category Desc','ed-catdesc',r.category_desc, '', _shared)}
-    ${_ef('Category','ed-category',r.category, '', _shared)}
-    ${_ef('Major Category','ed-major',r.major_category, '', _shared)}
-    ${_ef('Classification','ed-classification',r.classification, '', _shared)}
-    ${_ef('Type','ed-type',r.type, '', _shared)}
-    ${_ef('Criticality','ed-criticality',r.criticality,'V.High / High / Med / Low', _shared)}
-    ${_ef('Reorder Type','ed-reorder',r.str_reorder_type, '', _shared)}
-    ${_ef('Category Manager','ed-catmgr',r.cat_manager, '', _shared)}
-    ${_ef('Cities (B C H P D)','ed-cities',[r.blr,r.chn,r.hyd,r.pun,r.ncr].filter(Boolean).join(' '),'space-separated letters present', _shared)}
+    ${_ef('Material Description','ed-desc',r.description, '', P('material_description'))}
+    ${_ef('UOM','ed-uom',r.uom, '', P('uom'))}
+    ${_ef('Material Category Desc','ed-catdesc',r.category_desc, '', P('material_category_desc'))}
+    ${_ef('Category','ed-category',r.category, '', P('category'))}
+    ${_ef('Major Category','ed-major',r.major_category, '', P('major_category'))}
+    ${_ef('Classification','ed-classification',r.classification, '', P('classification'))}
+    ${_ef('Type','ed-type',r.type, '', P('type'))}
+    ${_ef('Criticality','ed-criticality',r.criticality,'V.High / High / Med / Low', P('criticality'))}
+    ${_ef('Reorder Type','ed-reorder',r.str_reorder_type, '', P('str_reorder_type'))}
+    ${_ef('Category Manager','ed-catmgr',r.cat_manager, '', P('cat_mgr'))}
+    ${_ef('Cities (B C H P D)','ed-cities',[r.blr,r.chn,r.hyd,r.pun,r.ncr].filter(Boolean).join(' '),'space-separated letters present', P('cities'))}
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Pricing & Order</div>
-    ${_ef('Unit Price (₹)','ed-price',r.unit_price, '', _shared)}
-    ${_ef('Supplier MOQ','ed-moq',r.supplier_moq, '', _shared)}
-    ${_ef('Distrbn MOQ','ed-dmoq',r.min_distrbn_qty, '', _shared)}
+    ${_ef('Unit Price (₹)','ed-price',r.unit_price, '', P('unit_price'))}
+    ${_ef('Supplier MOQ','ed-moq',r.supplier_moq, '', P('supplier_moq'))}
+    ${_ef('Distrbn MOQ','ed-dmoq',r.min_distrbn_qty, '', P('min_distrbn_qty'))}
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Season</div>
-    ${_ef('Season','ed-season',r.season, '', _shared)}
-    ${_ef('Seasonal Consumption','ed-seasoncons',r.seasonal_consumption, '', _shared)}
-    ${_efDate('Launch Start Date','ed-launch-start',r.launch_start, '', _shared)}
-    ${_efDate('Launch End Date','ed-launch-end',r.launch_end, '', _shared)}
-    ${_ef('Ratelist Name','ed-ratelist',r.ratelist_name, '', _shared)}
-    ${_ef('Product SKU','ed-productsku',r.product_sku, '', _shared)}
+    ${_ef('Season','ed-season',r.season, '', P('season'))}
+    ${_ef('Seasonal Consumption','ed-seasoncons',r.seasonal_consumption, '', P('seasonal_consumption'))}
+    ${_efDate('Launch Start Date','ed-launch-start',r.launch_start, '', P('launch_start'))}
+    ${_efDate('Launch End Date','ed-launch-end',r.launch_end, '', P('launch_end'))}
+    ${_ef('Ratelist Name','ed-ratelist',r.ratelist_name, '', P('ratelist_name'))}
+    ${_ef('Product SKU','ed-productsku',r.product_sku, '', P('product_sku'))}
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Vendors${_u.role==='region'?' — '+_u.region:''}</div>
     ${_blrBlock}${_ncrBlock}${_hydBlock}${_chnBlock}
     <div style="display:flex;gap:8px;margin-top:18px">
       <button id="edit-save" style="background:var(--navy);color:#fff;border:none;padding:9px 20px;border-radius:6px;font-weight:600;cursor:pointer">Save Changes</button>
       <span id="edit-msg" style="font-size:12px;align-self:center"></span>
     </div>
-    <div style="font-size:11px;color:var(--text-4);margin-top:10px">Fields marked 🔒 are managed by the admin. BLR lead time is read from the vendor suffix (Canvera-3 → 3 days).</div>`;
+    <div style="font-size:11px;color:var(--text-4);margin-top:10px">Fields marked 🔒 aren't editable by your role. BLR lead time is read from the vendor suffix (Canvera-3 → 3 days).</div>`;
   document.getElementById('edit-modal').style.display = 'flex';
 }
 
