@@ -576,6 +576,8 @@
   body.role-region .admin-only{display:none !important;}
   /* view-only team roles (commercial/inventory until fields assigned): hide edit buttons */
   body.role-viewonly .edit-item-btn, body.role-viewonly #add-material-btn, body.role-viewonly #bulk-upload-btn{display:none !important;}
+  /* hide Adjust buttons for users without stock-adjust permission */
+  body.no-stock-perm .adjust-btn{display:none !important;}
   .loading-overlay{
     position:fixed;inset:0;background:#1B3560;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -856,6 +858,37 @@
   </div>
 </header>
 
+<!-- ===== PERMISSIONS MANAGER (admin only) ===== -->
+<div id="perms-modal" style="display:none;position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:3000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;max-width:560px;width:92%;max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid #e5e7eb">
+      <div>
+        <div style="font-weight:700;color:#1B3560;font-size:16px">Field Edit Permissions</div>
+        <div style="font-size:12px;color:#6B7280">Choose which fields each team / region can edit</div>
+      </div>
+      <button onclick="document.getElementById('perms-modal').style.display='none'" style="border:none;background:none;font-size:22px;cursor:pointer;color:#9CA3AF">&times;</button>
+    </div>
+    <div style="padding:20px 22px">
+      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Role</label>
+      <select id="perms-role" style="width:100%;padding:10px;border:1px solid #C4CAD4;border-radius:8px;font-size:14px;margin-bottom:18px">
+        <option value="procurement">Procurement</option>
+        <option value="commercial">Commercial</option>
+        <option value="inventory">Inventory</option>
+        <option value="region">Region users (all regions)</option>
+      </select>
+      <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px">Editable fields <span id="perms-count" style="color:#9CA3AF;font-weight:400"></span></div>
+      <div id="perms-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;max-height:340px;overflow:auto;padding:4px 2px"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:16px">
+        <button id="perms-save" style="background:#1B3560;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-weight:600;cursor:pointer">Save</button>
+        <button id="perms-selectall" style="background:#f1f2f4;color:#374151;border:none;padding:10px 16px;border-radius:8px;font-weight:500;cursor:pointer">Select all</button>
+        <button id="perms-clearall" style="background:#f1f2f4;color:#374151;border:none;padding:10px 16px;border-radius:8px;font-weight:500;cursor:pointer">Clear all</button>
+        <span id="perms-msg" style="font-size:13px;margin-left:6px"></span>
+      </div>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:12px">Note: Region users always keep edit access to their own region's vendor block + stock, regardless of these toggles. Changes apply when each user next loads the tool.</div>
+    </div>
+  </div>
+</div>
+
 <div class="tabs-row">
   <div class="tabs-inner" id="tabs">
     <button class="tab active" data-tab="all">All Materials</button>
@@ -934,6 +967,8 @@
         <button class="btn" id="refresh-data-btn" title="Reload latest data from the database">🔄 Refresh data</button>
         <button class="btn">⬇ Export CSV</button>
         <button class="btn admin-only" id="bulk-upload-btn" title="Upload many materials from the Excel template">⬆ Bulk Upload</button>
+        <button class="btn" id="bulk-adjust-btn" title="Upload many stock adjustments at once (SKU / ± amount / reason)" style="display:none">📦 Bulk Adjust</button>
+        <button class="btn admin-only" id="perms-btn" title="Manage who can edit which fields">⚙ Permissions</button>
         <button class="btn primary admin-only" id="add-material-btn">+ Add Material</button>
       </div>
     </div>
@@ -1238,7 +1273,7 @@ function rowHTML(r,idx){
     cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="vendor-cell">${vendorCell(info.vendor,info.vendor_alt)}</td><td class="${info.lead_time==null?"num muted":"num"}">${info.lead_time!=null?info.lead_time+' <span class="unit">d</span>':"—"}</td><td class="reorder-cell">${reorderPill(info.str_reorder)}${info.ordering_frequency!=null?`<span class="freq">every ${info.ordering_frequency}d</span>`:""}</td><td class="${info.consumption_3mo==null?"num muted":"num"}">${fmtConsumption(info.consumption_3mo)} ${info.consumption_3mo!=null&&r.uom?`<span class="unit">${r.uom}</span>`:""}</td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td>${reorderPill(info.str_reorder)}</td>`;
   }else{
     const cities=REGIONS.map(c=>{const v=r[c.flag];if(v==="Discontinued")return`<span class="city discon" title="Discontinued">${c.label}</span>`;if(v)return`<span class="city on" title="${c.name}">${c.label}</span>`;return`<span class="city" title="Not in ${c.name}">${c.label}</span>`}).join("");
-    const adjCls=r.adjusted_count==null?"num muted":"num";const adjBadge=r.adjustment&&r.adjustment!=0?`<span style="font-size:10px;color:var(--orange);display:block">${r.adjustment>0?"+":""}${r.adjustment}</span>`:"";cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="cat-cell"><span class="major">${r.major_category}</span>${r.category}</td><td><div class="cities">${cities}</div></td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td class="${r.consumption_month==null?"num muted":"num"}">${fmtConsumption(r.consumption_month)} ${r.consumption_month!=null&&r.uom?`<span class="unit">${r.uom}/mo</span>`:""}</td><td>${reorderPill(r.str_reorder_type)}</td><td class="${adjCls}">${r.adjusted_count!=null?fmtNum(r.adjusted_count):"—"}${adjBadge}</td><td><button onclick="event.stopPropagation();openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">Adjust</button></td>`;
+    const adjCls=r.adjusted_count==null?"num muted":"num";const adjBadge=r.adjustment&&r.adjustment!=0?`<span style="font-size:10px;color:var(--orange);display:block">${r.adjustment>0?"+":""}${r.adjustment}</span>`:"";cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="cat-cell"><span class="major">${r.major_category}</span>${r.category}</td><td><div class="cities">${cities}</div></td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td class="${r.consumption_month==null?"num muted":"num"}">${fmtConsumption(r.consumption_month)} ${r.consumption_month!=null&&r.uom?`<span class="unit">${r.uom}/mo</span>`:""}</td><td>${reorderPill(r.str_reorder_type)}</td><td class="${adjCls}">${r.adjusted_count!=null?fmtNum(r.adjusted_count):"—"}${adjBadge}</td><td><button class="adjust-btn" onclick="event.stopPropagation();openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">Adjust</button></td>`;
   }
   const detailHTML=`
     <div class="detail-section"><h5>Material Details</h5>
@@ -1261,7 +1296,7 @@ function rowHTML(r,idx){
       <div class="detail-item"><dt>Distrbn MOQ</dt><dd>${r.min_distrbn_qty!=null?fmtNum(r.min_distrbn_qty):"—"}</dd></div>
     </dl>
     <div style="margin-top:12px;display:flex;gap:8px">
-      <button onclick="openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Adjust Stock</button>
+      <button class="adjust-btn" onclick="openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Adjust Stock</button>
       <button class="edit-item-btn" onclick="openEditModal('${r.sku}')" style="background:var(--surface-2);color:var(--navy);border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Edit Item</button>
     </div></div>
     <div class="detail-section"><h5>Stock Parameters</h5>
@@ -1732,6 +1767,25 @@ function _applyUserAccessUI(){
   const lg = document.getElementById('logout-btn');
   if (lg) lg.addEventListener('click', _doLogout);
 
+  // Stock-adjust permission → hide Adjust buttons if not allowed
+  if (!_canEditField('stock')) document.body.classList.add('no-stock-perm');
+
+  // Bulk Upload button: it's tagged .admin-only (hidden for region via CSS), but
+  // commercial/inventory may now have bulk_upload permission — show it for them.
+  const bulkBtn = document.getElementById('bulk-upload-btn');
+  if (bulkBtn) bulkBtn.style.display = _canBulkUpload() ? '' : 'none';
+
+  // Bulk Adjust button: shown only for admin or roles granted 'bulk_adjust' in Permissions.
+  const bulkAdjBtn = document.getElementById('bulk-adjust-btn');
+  if (bulkAdjBtn) bulkAdjBtn.style.display = _canBulkAdjust() ? '' : 'none';
+
+  // Permissions + Add Material are STRICTLY admin-only. (Bug fix: the .admin-only CSS
+  // class only hid these for region users — team logins could still see them.)
+  ['perms-btn','add-material-btn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = _isAdmin() ? '' : 'none';
+  });
+
   // Region users are locked to one region — hide the Region filter menu/tab.
   // Team users (procurement/commercial/inventory) and admin keep all regions.
   if (u.role === 'region'){
@@ -1742,53 +1796,116 @@ function _applyUserAccessUI(){
     }
   }
 }
-// True if the user's role can edit at least one field (admin/procurement yes; commercial/inventory not yet)
+// True if the user's role can do at least one action (edit a field, adjust stock, or bulk upload)
 function _canEditAnything(){
   const r = (window._USER||{}).role;
   if (r === 'admin' || r === 'region') return true;
   if (r === 'procurement') return true;
   if (r === 'commercial' || r === 'inventory'){
-    return (TEAM_EDITABLE_FIELDS[r] && TEAM_EDITABLE_FIELDS[r].size > 0);
+    const s = TEAM_EDITABLE_FIELDS[r];
+    return !!(s && s.size > 0);   // includes stock/bulk_upload, so they won't be 'view-only'
   }
   return false;
 }
 
 // Permission helper used by edit/upload UI.
 // ===== PERMISSION SYSTEM (roles: admin / procurement / commercial / inventory / region) =====
-// Field-level edit permissions per team. Each entry is the set of *field keys* that team may edit.
-// Field keys match the logical fields used in the edit form (see _canEditField mapping below).
-const TEAM_EDITABLE_FIELDS = {
-  procurement: new Set([
-    'classification','type','material_category_desc','uom',
+// ===== MASTER FIELD CATALOG (everything an admin can grant edit access to) =====
+// key = logical field used in the edit form; label = what the admin sees in the permissions UI.
+const FIELD_CATALOG = [
+  { key:'material_description', label:'Material Description' },
+  { key:'uom', label:'UOM' },
+  { key:'material_category_desc', label:'Material Category Desc' },
+  { key:'category', label:'Category' },
+  { key:'major_category', label:'Major Category' },
+  { key:'classification', label:'Classification' },
+  { key:'type', label:'Type' },
+  { key:'criticality', label:'Criticality' },
+  { key:'str_reorder_type', label:'Reorder Type' },
+  { key:'cat_mgr', label:'Category Manager' },
+  { key:'cities', label:'Cities (BLR/CHN/HYD/PUN/NCR flags)' },
+  { key:'unit_price', label:'Unit Price' },
+  { key:'supplier_moq', label:'Supplier MOQ' },
+  { key:'min_distrbn_qty', label:'Distrbn MOQ' },
+  { key:'blr_hub_capacity', label:'BLR HUB Capacity' },
+  { key:'season', label:'Season' },
+  { key:'seasonal_consumption', label:'Seasonal Consumption' },
+  { key:'launch_start', label:'Launch Start Date' },
+  { key:'launch_end', label:'Launch End Date' },
+  { key:'ratelist_name', label:'Ratelist Name' },
+  { key:'product_sku', label:'Product SKU' },
+  { key:'blr_vendor', label:'BLR Vendor' },
+  { key:'chn_vendor', label:'CHN Vendor' },
+  { key:'hyd_vendor', label:'HYD Vendor' },
+  { key:'ncr_vendor', label:'NCR Vendor' },
+  { key:'pun_vendor', label:'PUN Vendor' },
+  { key:'stock', label:'⚙ Adjust stock quantity' },
+  { key:'bulk_upload', label:'⚙ Bulk upload access' },
+  { key:'bulk_adjust', label:'⚙ Bulk adjustment upload' },
+];
+const PERM_ROLES = ['procurement','commercial','inventory','region'];
+
+// DEFAULT permissions (used if none saved in Firestore yet). Admin can override via the UI.
+const DEFAULT_PERMISSIONS = {
+  procurement: [
+    'material_description','classification','type','material_category_desc','uom',
+    'cat_mgr','unit_price','min_distrbn_qty',
     'supplier_moq','season','launch_start','launch_end','str_reorder_type',
-    'seasonal_consumption','cities',           // city flags BLR/CHN/HYD/PUN/NCR
-    'blr_vendor','chn_vendor','hyd_vendor','ncr_vendor','pun_vendor'  // Vendor (region) + Vendor Name(Short)
-  ]),
-  commercial: new Set([]),   // view-only for now (fields TBD)
-  inventory:  new Set([]),   // view-only for now (fields TBD)
+    'seasonal_consumption','cities',
+    'blr_vendor','chn_vendor','hyd_vendor','ncr_vendor','pun_vendor'
+    // note: NO 'stock', NO 'bulk_upload' for procurement
+  ],
+  commercial: ['stock','bulk_upload'],   // can adjust stock + bulk upload
+  inventory:  ['min_distrbn_qty','stock','bulk_adjust'],   // Distrbn MOQ + adjust stock + bulk ADJUSTMENT upload (no materials bulk upload)
+  // region users: their own region's vendor (always) + stock adjustments
+  region: ['stock'],
 };
 
-// scope can be: a region code ('BLR'..), 'stock', 'shared', OR a specific field key.
-// We resolve everything to a decision based on the user's role.
+// Live permission sets (populated from Firestore at boot; falls back to defaults).
+let TEAM_EDITABLE_FIELDS = {
+  procurement: new Set(DEFAULT_PERMISSIONS.procurement),
+  commercial:  new Set(DEFAULT_PERMISSIONS.commercial),
+  inventory:   new Set(DEFAULT_PERMISSIONS.inventory),
+  region:      new Set(DEFAULT_PERMISSIONS.region),
+};
+
+// Load saved permissions from Firestore (config/permissions). Safe fallback to defaults.
+async function _loadPermissions(){
+  try {
+    const { doc, getDoc } = window._fsApi;
+    const snap = await getDoc(doc(window._FS, 'config', 'permissions'));
+    if (snap.exists()){
+      const data = snap.data() || {};
+      PERM_ROLES.forEach(role => {
+        if (Array.isArray(data[role])) TEAM_EDITABLE_FIELDS[role] = new Set(data[role]);
+      });
+      console.log('[PERMS] loaded from Firestore');
+    } else {
+      console.log('[PERMS] none saved — using defaults');
+    }
+  } catch(e){ console.warn('[PERMS] load failed, using defaults:', e.message); }
+}
+
+// scope can be: a region code ('BLR'..), 'stock', OR a specific field key.
 function _canEditField(scope, fieldKey){
   const u = window._USER || {};
   const role = u.role;
   if (role === 'admin') return true;
 
-  // Region users: region-specific operational fields + stock only
+  // Region users: their region's vendor block + stock (+ any field keys granted to 'region')
   if (role === 'region'){
-    if (scope === 'stock') return true;
+    const allow = TEAM_EDITABLE_FIELDS.region || new Set();
+    if (scope === 'stock') return allow.has('stock');
     if (scope === u.region) return true;          // their region's vendor/lead block
-    return false;                                  // everything else view-only
+    const key = fieldKey || scope;
+    return allow.has(key);                         // any extra fields admin granted to region
   }
 
-  // Team users (procurement / commercial / inventory): field-level allow-list, all regions
+  // Team users: field-level allow-list, all regions
   if (role === 'procurement' || role === 'commercial' || role === 'inventory'){
     const allow = TEAM_EDITABLE_FIELDS[role] || new Set();
-    if (scope === 'stock') return false;           // teams don't adjust stock (unless added later)
-    // Region vendor blocks: procurement can edit vendor fields (mapped via fieldKey)
-    const key = fieldKey || scope;                 // when called with a field key directly
-    // region-code scopes map to that region's vendor field
+    if (scope === 'stock') return allow.has('stock');
+    const key = fieldKey || scope;
     if (['BLR','CHN','HYD','PUN','NCR'].includes(scope)){
       const vk = ({BLR:'blr_vendor',CHN:'chn_vendor',HYD:'hyd_vendor',NCR:'ncr_vendor',PUN:'pun_vendor'})[scope];
       return allow.has(vk);
@@ -1797,8 +1914,20 @@ function _canEditField(scope, fieldKey){
   }
   return false;
 }
-// Procurement + admin can bulk upload
-function _canBulkUpload(){ const r=(window._USER||{}).role; return r === 'admin' || r === 'procurement'; }
+// Bulk upload: admin always; teams/region if they have the 'bulk_upload' permission
+function _canBulkUpload(){
+  const u = window._USER || {};
+  if (u.role === 'admin') return true;
+  const allow = TEAM_EDITABLE_FIELDS[u.role] || new Set();
+  return allow.has('bulk_upload');
+}
+// Bulk ADJUSTMENT upload: admin always; teams/region if granted 'bulk_adjust' in Permissions
+function _canBulkAdjust(){
+  const u = window._USER || {};
+  if (u.role === 'admin') return true;
+  const allow = TEAM_EDITABLE_FIELDS[u.role] || new Set();
+  return allow.has('bulk_adjust');
+}
 function _isAdmin(){ return (window._USER||{}).role === 'admin'; }
 // Does this user see all regions (admin + all team roles) or just one (region users)?
 function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'; }
@@ -1843,6 +1972,7 @@ function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'
       // show the loading overlay now and proceed to load data
       const ld = document.getElementById('loading-overlay');
       if (ld) ld.style.display = '';
+      await _loadPermissions();   // load admin-configured field permissions
       await _bootApp();
     });
   } catch (err) {
@@ -2252,6 +2382,7 @@ function _adjModalHTML() {
 
 let _adjSku = null;
 function openAdjustModal(sku) {
+  if (!_canEditField('stock')) { alert('You do not have permission to adjust stock.'); return; }
   _adjSku = sku;
   const row = DATA.find(r => r.sku === sku);
   if (!row) return;
@@ -3458,6 +3589,64 @@ async function _saveUpload() {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.body.insertAdjacentHTML('beforeend', _uploadModalHTML());
+
+  // ===== Permissions manager wiring =====
+  function _renderPermsFields(){
+    const role = document.getElementById('perms-role').value;
+    const allow = TEAM_EDITABLE_FIELDS[role] || new Set();
+    const wrap = document.getElementById('perms-fields');
+    wrap.innerHTML = FIELD_CATALOG.map(f => {
+      const checked = allow.has(f.key) ? 'checked' : '';
+      return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;cursor:pointer">
+        <input type="checkbox" class="perm-cb" data-key="${f.key}" ${checked} style="width:16px;height:16px;cursor:pointer">
+        <span>${f.label}</span>
+      </label>`;
+    }).join('');
+    _updatePermsCount();
+  }
+  function _updatePermsCount(){
+    const n = document.querySelectorAll('#perms-fields .perm-cb:checked').length;
+    document.getElementById('perms-count').textContent = `(${n} selected)`;
+  }
+  const permsBtn = document.getElementById('perms-btn');
+  if (permsBtn) permsBtn.addEventListener('click', () => {
+    if (!_isAdmin()) { alert('Permissions are admin-only.'); return; }
+    document.getElementById('perms-msg').textContent = '';
+    _renderPermsFields();
+    document.getElementById('perms-modal').style.display = 'flex';
+  });
+  const roleSel = document.getElementById('perms-role');
+  if (roleSel) roleSel.addEventListener('change', _renderPermsFields);
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('perm-cb')) _updatePermsCount();
+  });
+  const selAll = document.getElementById('perms-selectall');
+  if (selAll) selAll.addEventListener('click', () => {
+    document.querySelectorAll('#perms-fields .perm-cb').forEach(cb => cb.checked = true); _updatePermsCount();
+  });
+  const clrAll = document.getElementById('perms-clearall');
+  if (clrAll) clrAll.addEventListener('click', () => {
+    document.querySelectorAll('#perms-fields .perm-cb').forEach(cb => cb.checked = false); _updatePermsCount();
+  });
+  const saveBtn = document.getElementById('perms-save');
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    if (!_isAdmin()) return;
+    const role = document.getElementById('perms-role').value;
+    const selected = Array.from(document.querySelectorAll('#perms-fields .perm-cb:checked')).map(cb => cb.dataset.key);
+    const msg = document.getElementById('perms-msg');
+    msg.style.color = '#6B7280'; msg.textContent = 'Saving…';
+    try {
+      // update in-memory immediately
+      TEAM_EDITABLE_FIELDS[role] = new Set(selected);
+      // persist the whole permissions doc (merge so other roles are untouched)
+      const { doc, setDoc } = window._fsApi;
+      await setDoc(doc(window._FS, 'config', 'permissions'), { [role]: selected }, { merge: true });
+      msg.style.color = '#16a34a'; msg.textContent = '✓ Saved';
+    } catch(err){
+      msg.style.color = '#c0392b'; msg.textContent = 'Save failed: ' + (err.message||err);
+    }
+  });
+
   const openBtn = document.getElementById('bulk-upload-btn');
   if (openBtn) openBtn.addEventListener('click', () => {
     if (!_canBulkUpload()) { alert('Bulk upload is admin-only.'); return; }
@@ -3470,10 +3659,229 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target && e.target.id === 'dl-template') _downloadTemplate();
     if (e.target && e.target.id === 'upload-confirm') _saveUpload();
   });
+});
+
+
+/* ══════════════════════════════════════════════════════════════
+   BULK ADJUSTMENT UPLOAD  — 3-column file: SKU / Adjustment(±) / Reason
+   - Adjustment is a DELTA (+50 adds, -20 subtracts) — same as the single Adjust flow.
+   - Each valid row runs through applyAdjustment() → live_stock update + stock_adjustments audit entry.
+   - Gated by the 'bulk_adjust' permission (⚙ Permissions → "Bulk adjustment upload").
+   ══════════════════════════════════════════════════════════════ */
+let _adjUploadRows = null;   // validated rows awaiting confirm
+
+function _adjUploadModalHTML() {
+  return `
+  <div id="adj-upload-modal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2100;align-items:center;justify-content:center">
+    <div style="background:var(--bg);border-radius:8px;max-width:760px;width:94%;max-height:90vh;overflow:auto;box-shadow:var(--shadow-lg)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--border)">
+        <div style="font-weight:700;color:var(--navy)">Bulk Stock Adjustments</div>
+        <button onclick="document.getElementById('adj-upload-modal').style.display='none'" style="border:none;background:none;font-size:22px;cursor:pointer;color:var(--text-3)">&times;</button>
+      </div>
+      <div style="padding:22px" id="adj-upload-body">
+        <ol style="font-size:13px;color:var(--text-2);line-height:1.7;margin:0 0 16px 18px;padding:0">
+          <li>Download the template — 3 columns: <b>SKU</b>, <b>Adjustment</b>, <b>Reason</b>.</li>
+          <li>Adjustment is <b>+/- change</b> (e.g. <b>25</b> adds 25, <b>-10</b> subtracts 10). It is NOT the final count.</li>
+          <li>Upload the file — you'll see a preview, nothing saves until you confirm.</li>
+        </ol>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px">
+          <button id="adj-dl-template" class="btn">⬇ Download Template</button>
+          <label class="btn primary" style="cursor:pointer">⬆ Choose File
+            <input id="adj-upload-file" type="file" accept=".xlsx,.xls,.csv" style="display:none">
+          </label>
+          <span id="adj-upload-filename" style="font-size:12px;color:var(--text-3)"></span>
+        </div>
+        <div id="adj-upload-preview"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _downloadAdjTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['SKU','Adjustment','Reason'],
+    ['BNDBCR17', 25, 'Month-end physical recount'],
+    ['PCKCRR38', -10, 'Damaged in storage'],
+  ]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Stock Adjustments');
+  XLSX.writeFile(wb, 'stock_adjustment_template.xlsx');
+}
+
+function _showAdjUploadError(msg){
+  document.getElementById('adj-upload-preview').innerHTML =
+    `<div style="background:var(--red-soft);color:var(--red);padding:12px 14px;border-radius:6px;font-size:13px">${msg}</div>`;
+}
+
+function _parseAdjUpload(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let rows;
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+    } catch(err){ _showAdjUploadError('Could not read the file: '+err.message); return; }
+
+    if (!rows.length) { _showAdjUploadError('The file has no data rows.'); return; }
+
+    // Map headers case-insensitively (SKU / Adjustment / Reason)
+    const headerMap = {};
+    Object.keys(rows[0]).forEach(h => {
+      const k = String(h).trim().toLowerCase();
+      if (k === 'sku') headerMap.sku = h;
+      else if (k === 'adjustment' || k === 'amount' || k === 'adjustment (+/-)') headerMap.adj = h;
+      else if (k === 'reason' || k === 'reason / note' || k === 'note') headerMap.reason = h;
+    });
+    if (!headerMap.sku || !headerMap.adj) {
+      _showAdjUploadError('The file must have "SKU" and "Adjustment" columns. Please use the template.');
+      return;
+    }
+
+    const skuMap = {}; DATA.forEach(r => skuMap[r.sku] = r);
+    const seen = new Set();
+    const valid = [], errors = [], warnings = [];
+
+    rows.forEach((row, i) => {
+      const rowNum = i + 2;
+      const sku = String(row[headerMap.sku] || '').trim();
+      if (!sku) { errors.push(`Row ${rowNum}: missing SKU`); return; }
+      if (seen.has(sku)) { errors.push(`Row ${rowNum} (${sku}): duplicate SKU in this file — combine into one row`); return; }
+      seen.add(sku);
+      const item = skuMap[sku];
+      if (!item) { errors.push(`Row ${rowNum} (${sku}): SKU not found in the database`); return; }
+
+      const rawAdj = String(row[headerMap.adj]).trim().replace(/,/g,'');
+      const amount = parseFloat(rawAdj);
+      if (rawAdj === '' || isNaN(amount)) { errors.push(`Row ${rowNum} (${sku}): Adjustment "${row[headerMap.adj]}" is not a number`); return; }
+      if (amount === 0) { errors.push(`Row ${rowNum} (${sku}): Adjustment is 0 — no change, remove the row`); return; }
+
+      let reason = headerMap.reason ? String(row[headerMap.reason] || '').trim() : '';
+      if (!reason) {
+        reason = 'Bulk adjustment';
+        warnings.push(`Row ${rowNum} (${sku}): Reason was blank — will be saved as "Bulk adjustment"`);
+      }
+
+      const curStock = (item.closing_stock != null) ? parseFloat(item.closing_stock) || 0 : 0;
+      const curAdj = parseFloat(item.adjustment) || 0;
+      const newAdjusted = curStock + curAdj + amount;
+      if (newAdjusted < 0) warnings.push(`Row ${rowNum} (${sku}): result goes NEGATIVE (${newAdjusted}) — check the amount`);
+
+      valid.push({ sku, amount, reason, desc: item.description || '', curStock, newAdjusted });
+    });
+
+    _adjUploadRows = valid;
+    _renderAdjUploadPreview(rows.length, valid, errors, warnings);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function _renderAdjUploadPreview(total, valid, errors, warnings) {
+  const box = document.getElementById('adj-upload-preview');
+  const canSave = valid.length > 0 && errors.length === 0;
+  const sampleRows = valid.slice(0, 8).map(v => `
+    <tr>
+      <td style="padding:5px 8px;font-family:monospace;font-size:12px">${v.sku}</td>
+      <td style="padding:5px 8px;font-size:12px;color:var(--text-2);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.desc}</td>
+      <td style="padding:5px 8px;text-align:right;font-weight:600;color:${v.amount>=0?'var(--green)':'var(--red)'}">${v.amount>0?'+':''}${v.amount}</td>
+      <td style="padding:5px 8px;text-align:right">${fmtNum(v.newAdjusted)}</td>
+      <td style="padding:5px 8px;font-size:11px;color:var(--text-3)">${v.reason}</td>
+    </tr>`).join('');
+  box.innerHTML = `
+    <div style="border-top:1px solid var(--border);padding-top:16px">
+      <div style="font-weight:700;color:var(--text-2);font-size:12px;text-transform:uppercase;margin-bottom:10px">Preview</div>
+      <div style="display:flex;gap:10px;margin-bottom:14px">
+        <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">TOTAL ROWS</div><div style="font-size:22px;font-weight:700;color:var(--navy)">${total}</div></div>
+        <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">VALID</div><div style="font-size:22px;font-weight:700;color:var(--green)">${valid.length}</div></div>
+        <div style="flex:1;background:${errors.length?'var(--red-soft)':'var(--surface)'};border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">ERRORS</div><div style="font-size:22px;font-weight:700;color:${errors.length?'var(--red)':'var(--text-4)'}">${errors.length}</div></div>
+        <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">WARNINGS</div><div style="font-size:22px;font-weight:700;color:${warnings.length?'#B45309':'var(--text-4)'}">${warnings.length}</div></div>
+      </div>
+      ${errors.length?`<div style="background:var(--red-soft);color:var(--red);padding:10px 12px;border-radius:6px;font-size:12px;max-height:140px;overflow:auto;margin-bottom:10px"><b>Fix these and re-upload (nothing will save until 0 errors):</b>${errors.slice(0,50).map(e=>`<div>${e}</div>`).join('')}${errors.length>50?`<div>…and ${errors.length-50} more</div>`:''}</div>`:''}
+      ${warnings.length?`<div style="background:#FFF4E0;color:#854F0B;padding:10px 12px;border-radius:6px;font-size:12px;max-height:120px;overflow:auto;margin-bottom:14px"><b>Warnings (allowed):</b>${warnings.slice(0,30).map(w=>`<div>${w}</div>`).join('')}${warnings.length>30?`<div>…and ${warnings.length-30} more</div>`:''}</div>`:''}
+      ${valid.length?`<table style="width:100%;border-collapse:collapse;margin-bottom:14px;background:var(--surface);border-radius:6px;overflow:hidden">
+        <thead><tr style="font-size:10px;text-transform:uppercase;color:var(--text-3);text-align:left"><th style="padding:6px 8px">SKU</th><th style="padding:6px 8px">Description</th><th style="padding:6px 8px;text-align:right">Adjustment</th><th style="padding:6px 8px;text-align:right">New Adjusted Count</th><th style="padding:6px 8px">Reason</th></tr></thead>
+        <tbody>${sampleRows}</tbody>
+      </table>${valid.length>8?`<div style="font-size:11px;color:var(--text-4);margin:-8px 0 14px">…and ${valid.length-8} more rows</div>`:''}`:''}
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="adj-upload-confirm" class="btn primary" ${canSave?'':'disabled style="opacity:.5;cursor:not-allowed"'}>Confirm & Apply ${valid.length} adjustments</button>
+        <span id="adj-upload-msg" style="font-size:12px"></span>
+      </div>
+    </div>`;
+}
+
+async function _saveAdjUpload() {
+  if (!_adjUploadRows || !_adjUploadRows.length) return;
+  if (!_canBulkAdjust()) { alert('You do not have permission for bulk adjustments.'); return; }
+  const msg = document.getElementById('adj-upload-msg');
+  const btn = document.getElementById('adj-upload-confirm');
+  btn.disabled = true; btn.style.opacity = '.5';
+  msg.style.color = 'var(--text-3)'; msg.textContent = 'Applying…';
+
+  const rows = _adjUploadRows;
+  const failed = [];
+  let done = 0;
+  try {
+    // chunks of 10 in parallel — each row is a safe transaction + audit log entry
+    const CHUNK = 10;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK);
+      await Promise.all(chunk.map(async (r) => {
+        try { await applyAdjustment(r.sku, r.amount, r.reason); }
+        catch(e){ failed.push(`${r.sku}: ${e.message}`); }
+      }));
+      done = Math.min(i + CHUNK, rows.length);
+      msg.textContent = `Applied ${done} of ${rows.length}…`;
+    }
+
+    renderTable();   // table reflects new adjusted counts immediately
+    try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+
+    if (failed.length) {
+      msg.style.color = 'var(--red)';
+      msg.textContent = `Done with ${failed.length} failure(s) — see console. ${rows.length - failed.length} applied.`;
+      console.warn('Bulk adjustment failures:', failed);
+    } else {
+      msg.style.color = 'var(--green)';
+      msg.textContent = `Done — ${rows.length} adjustments applied ✓`;
+    }
+    _adjUploadRows = null;
+
+    // one summary email for the whole batch
+    try {
+      const lines = [];
+      lines.push(`Total adjustments: ${rows.length}${failed.length ? ` (failed: ${failed.length})` : ''}`);
+      lines.push('');
+      rows.slice(0, 100).forEach(r => lines.push(`${r.sku}: ${r.amount>0?'+':''}${r.amount} — ${r.reason}`));
+      if (rows.length > 100) lines.push(`…and ${rows.length - 100} more`);
+      notifyProcurement('Bulk Adjustment', lines.join('\n'));
+    } catch(e){ console.warn('notify (bulk adjust) failed:', e.message); }
+  } catch(err) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Error: ' + err.message;
+    btn.disabled = false; btn.style.opacity = '1';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.body.insertAdjacentHTML('beforeend', _adjUploadModalHTML());
+
+  const openAdjUp = document.getElementById('bulk-adjust-btn');
+  if (openAdjUp) openAdjUp.addEventListener('click', () => {
+    if (!_canBulkAdjust()) { alert('You do not have permission for bulk adjustments.'); return; }
+    _adjUploadRows = null;
+    document.getElementById('adj-upload-preview').innerHTML = '';
+    document.getElementById('adj-upload-filename').textContent = '';
+    document.getElementById('adj-upload-file').value = '';
+    document.getElementById('adj-upload-modal').style.display = 'flex';
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'adj-dl-template') _downloadAdjTemplate();
+    if (e.target && e.target.id === 'adj-upload-confirm') _saveAdjUpload();
+  });
   document.addEventListener('change', (e) => {
-    if (e.target && e.target.id === 'upload-file' && e.target.files.length) {
-      document.getElementById('upload-filename').textContent = e.target.files[0].name;
-      _parseUpload(e.target.files[0]);
+    if (e.target && e.target.id === 'adj-upload-file' && e.target.files.length) {
+      document.getElementById('adj-upload-filename').textContent = e.target.files[0].name;
+      _parseAdjUpload(e.target.files[0]);
     }
   });
 });
