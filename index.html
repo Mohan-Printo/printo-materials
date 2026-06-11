@@ -65,6 +65,8 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, query, where, runTransaction, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   const FIREBASE_CONFIG = {
     apiKey: "AIzaSyCITb5IznWkdftR4Eo4DUfswxe0FFWfSLA",
     authDomain: "material-printo.firebaseapp.com",
@@ -77,9 +79,11 @@
   const _app = initializeApp(FIREBASE_CONFIG);
   // database is named "default" (not the implicit one)
   const _fs = getFirestore(_app, "default");
+  const _auth = getAuth(_app);
   // expose a tiny compat-like wrapper so the rest of the (compat-style) code works unchanged
   window._FS = _fs;
   window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, query, where, runTransaction, writeBatch };
+  window._authApi = { auth: _auth, signInWithEmailAndPassword, signOut, onAuthStateChanged };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
 <style>
@@ -539,6 +543,37 @@
     td.desc{max-width:200px}
   }
 
+  .login-overlay{
+    position:fixed;inset:0;z-index:10000;background:linear-gradient(135deg,#1B3560,#15294a);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .login-card{
+    background:#fff;border-radius:16px;padding:40px 36px;width:380px;max-width:90vw;
+    box-shadow:0 20px 60px rgba(0,0,0,.3);
+  }
+  .login-logo{font-size:24px;font-weight:800;color:#1B3560;margin-bottom:6px}
+  .login-logo .logo-p{background:#F57224;color:#fff;padding:1px 7px;border-radius:6px;margin-right:1px}
+  .login-sub{font-size:14px;color:#6B7280;margin-bottom:26px}
+  .login-label{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;margin-top:14px}
+  .login-input{
+    width:100%;padding:11px 13px;border:1px solid #C4CAD4;border-radius:8px;font-size:14px;
+    box-sizing:border-box;
+  }
+  .login-input:focus{outline:none;border-color:#1B3560;box-shadow:0 0 0 3px rgba(27,53,96,.12)}
+  .login-btn{
+    width:100%;margin-top:24px;padding:12px;background:#1B3560;color:#fff;border:none;
+    border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;
+  }
+  .login-btn:hover{background:#15294a}
+  .login-btn:disabled{opacity:.6;cursor:not-allowed}
+  .login-error{margin-top:14px;font-size:13px;color:#c0392b;min-height:18px}
+  /* logged-in user chip in header */
+  .user-chip{display:flex;align-items:center;gap:8px;font-size:13px;color:#fff}
+  .user-chip .region-badge{background:#F57224;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:10px;letter-spacing:.04em}
+  .logout-btn{background:rgba(255,255,255,.12);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;margin-left:6px}
+  .logout-btn:hover{background:rgba(255,255,255,.22)}
+  /* hide admin-only controls for region users */
+  body.role-region .admin-only{display:none !important;}
   .loading-overlay{
     position:fixed;inset:0;background:#1B3560;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -775,6 +810,20 @@
 </head>
 <body>
 
+<!-- ===== LOGIN SCREEN ===== -->
+<div class="login-overlay" id="login-overlay" style="display:none">
+  <div class="login-card">
+    <div class="login-logo"><span class="logo-p">p</span><span>rinto</span> &nbsp;materials</div>
+    <div class="login-sub">Sign in to continue</div>
+    <label class="login-label">Email</label>
+    <input id="login-email" class="login-input" type="email" autocomplete="username" placeholder="you@printo.in">
+    <label class="login-label">Password</label>
+    <input id="login-password" class="login-input" type="password" autocomplete="current-password" placeholder="••••••••">
+    <button id="login-btn" class="login-btn">Sign in</button>
+    <div id="login-error" class="login-error"></div>
+  </div>
+</div>
+
 <div class="loading-overlay" id="loading-overlay">
   <div class="loading-logo">p<span>rinto</span> materials</div>
   <div class="loading-bar-wrap"><div class="loading-bar" id="loading-bar"></div></div>
@@ -796,9 +845,11 @@
       <div class="search-sugs" id="search-sugs"></div>
     </div>
 
-    <div class="user-chip" title="Operations Team">
-      <span class="user-avatar">P</span>
-      <span>Operations</span>
+    <div class="user-chip" id="user-chip" title="">
+      <span class="user-avatar" id="user-avatar">·</span>
+      <span id="user-name-display">—</span>
+      <span class="region-badge" id="user-region-badge" style="display:none"></span>
+      <button class="logout-btn" id="logout-btn">Logout</button>
     </div>
   </div>
 </header>
@@ -880,8 +931,8 @@
         <span id="cache-status" style="font-size:11px;color:var(--text-3);align-self:center;margin-right:4px"></span>
         <button class="btn" id="refresh-data-btn" title="Reload latest data from the database">🔄 Refresh data</button>
         <button class="btn">⬇ Export CSV</button>
-        <button class="btn" id="bulk-upload-btn" title="Upload many materials from the Excel template">⬆ Bulk Upload</button>
-        <button class="btn primary">+ Add Material</button>
+        <button class="btn admin-only" id="bulk-upload-btn" title="Upload many materials from the Excel template">⬆ Bulk Upload</button>
+        <button class="btn primary admin-only" id="add-material-btn">+ Add Material</button>
       </div>
     </div>
 
@@ -1149,7 +1200,12 @@ function renderHead(){
 }
 
 function regionMatrixHTML(r){
-  return`<div class="region-matrix">${REGIONS.map(reg=>{
+  // Region users see only their own region's card; admin sees all.
+  const _u = window._USER || {};
+  const _regionsToShow = (_u.role === 'region' && _u.region)
+    ? REGIONS.filter(reg => reg.key === _u.region)
+    : REGIONS;
+  return`<div class="region-matrix">${_regionsToShow.map(reg=>{
     const info=r.regions[reg.key]||{};
     const presence=r[reg.flag];
     const isOn=presence&&presence!=="Discontinued";
@@ -1333,7 +1389,11 @@ function openMenu(menuId,anchorEl){
 
 document.body.addEventListener("click",(e)=>{
   const tab=e.target.closest('.tab[data-menu]');
-  if(tab){const id=tab.dataset.menu;if(openMenuId===id)closeAllMenus();else openMenu(id,tab);return}
+  if(tab){
+    const id=tab.dataset.menu;
+    // Region users cannot open the Region menu (locked to their region)
+    if(id==='regions' && (window._USER||{}).role==='region'){ return; }
+    if(openMenuId===id)closeAllMenus();else openMenu(id,tab);return}
   const directTab=e.target.closest('.tab[data-tab]');
   if(directTab){
     closeAllMenus();
@@ -1347,6 +1407,8 @@ document.body.addEventListener("click",(e)=>{
     if(action==="major"){state.major=value;state.category=null}
     else if(action==="category"){state.category=value;const r=DATA.find(d=>d.category===value);if(r)state.major=r.major_category}
     else if(action==="region"){
+      // Region users are locked to their own region — ignore attempts to switch
+      if((window._USER||{}).role==='region'){ closeAllMenus(); return; }
       closeAllMenus();
       showRegionDashboard(value);
       return;
@@ -1547,12 +1609,148 @@ function computeAdjusted(closing, adjustment) {
 /* ══════════════════════════════════════════════════════════════
    LOAD + BUILD  — joins all collections by SKU
    ══════════════════════════════════════════════════════════════ */
+// ===== AUTH STATE =====
+// window._USER = { uid, email, region: 'BLR'|'CHN'|'NCR'|'HYD'|'PUN'|null, role: 'admin'|'region' }
+window._USER = null;
+
+function _regionToCity(region){
+  // map a region code to the materials city flag field
+  return ({ BLR:'blr', CHN:'chn', NCR:'ncr', HYD:'hyd', PUN:'pun' })[region] || null;
+}
+
+async function _loadUserProfile(uid, email){
+  // Read this user's region + role from the 'users' collection (doc id = uid).
+  // Fallback: doc id = email (in case you key it by email). Admin if role==admin or no region.
+  const { doc, getDoc } = window._fsApi;
+  let prof = null;
+  try {
+    const s1 = await getDoc(doc(window._FS, 'users', uid));
+    if (s1.exists()) prof = s1.data();
+  } catch(e){}
+  if (!prof) {
+    try {
+      const s2 = await getDoc(doc(window._FS, 'users', email));
+      if (s2.exists()) prof = s2.data();
+    } catch(e){}
+  }
+  if (!prof) {
+    // No profile found — treat as no access (safest). Admin must add them to 'users'.
+    return { uid, email, region:null, role:null, _missing:true };
+  }
+  const role = (prof.role || '').toLowerCase() === 'admin' ? 'admin' : 'region';
+  const region = prof.region ? String(prof.region).toUpperCase().trim() : null;
+  return { uid, email, region: (role==='admin' ? (region||null) : region), role };
+}
+
+function _showLogin(errMsg){
+  const lo = document.getElementById('login-overlay');
+  const ld = document.getElementById('loading-overlay');
+  if (ld) ld.style.display = 'none';
+  if (lo) lo.style.display = 'flex';
+  const e = document.getElementById('login-error');
+  if (e) e.textContent = errMsg || '';
+  const btn = document.getElementById('login-btn');
+  if (btn) btn.disabled = false;
+}
+function _hideLogin(){
+  const lo = document.getElementById('login-overlay');
+  if (lo) lo.style.display = 'none';
+}
+
+// Wire the login button + Enter key
+function _wireLogin(){
+  const btn = document.getElementById('login-btn');
+  const emailEl = document.getElementById('login-email');
+  const passEl = document.getElementById('login-password');
+  if (!btn) return;
+  const doLogin = async () => {
+    const email = (emailEl.value||'').trim();
+    const pass = passEl.value||'';
+    if (!email || !pass){ _showLogin('Enter email and password.'); return; }
+    btn.disabled = true;
+    document.getElementById('login-error').textContent = '';
+    try {
+      const { auth, signInWithEmailAndPassword } = window._authApi;
+      await signInWithEmailAndPassword(auth, email, pass);
+      // onAuthStateChanged will handle the rest
+    } catch(err){
+      let msg = 'Sign-in failed.';
+      const code = err?.code || '';
+      if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) msg = 'Incorrect email or password.';
+      else if (code.includes('too-many-requests')) msg = 'Too many attempts. Try again later.';
+      else if (code.includes('invalid-email')) msg = 'Invalid email address.';
+      _showLogin(msg);
+    }
+  };
+  btn.addEventListener('click', doLogin);
+  [emailEl, passEl].forEach(el => el && el.addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); }));
+}
+
+async function _doLogout(){
+  try { await window._authApi.signOut(window._authApi.auth); } catch(e){}
+  // hard reload to clear all in-memory data (so no region data lingers)
+  try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+  location.reload();
+}
+
+// Configure the UI for the logged-in user (chip, badges, role gating).
+function _applyUserAccessUI(){
+  const u = window._USER || {};
+  // header chip
+  const nameEl = document.getElementById('user-name-display');
+  const avEl = document.getElementById('user-avatar');
+  const badge = document.getElementById('user-region-badge');
+  const chip = document.getElementById('user-chip');
+  const email = u.email || '';
+  const shortName = email ? email.split('@')[0] : 'User';
+  if (nameEl) nameEl.textContent = shortName;
+  if (avEl) avEl.textContent = (shortName[0]||'U').toUpperCase();
+  if (u.role === 'admin'){
+    if (badge){ badge.style.display=''; badge.textContent='ADMIN'; badge.style.background='#1B3560'; }
+    if (chip) chip.title = email + ' (Admin — all regions)';
+    document.body.classList.add('role-admin');
+  } else {
+    if (badge && u.region){ badge.style.display=''; badge.textContent=u.region; }
+    if (chip) chip.title = email + ' (' + (u.region||'') + ')';
+    document.body.classList.add('role-region');
+    document.body.setAttribute('data-region', u.region||'');
+  }
+  // logout
+  const lg = document.getElementById('logout-btn');
+  if (lg) lg.addEventListener('click', _doLogout);
+
+  // Region users are locked to one region — hide the Region filter menu/tab
+  if (u.role === 'region'){
+    document.querySelectorAll('[data-menu="regions"], #menu-regions').forEach(el => { el.style.display='none'; });
+    // Lock the active filter to their region so the table/views only ever show their region
+    if (typeof state === 'object' && state) {
+      state.region = u.region;
+    }
+  }
+}
+
+// Permission helper used by edit/upload UI.
+function _canEditField(scope){
+  // scope: 'shared' (desc/price/criticality/...) or a region code ('BLR'...) or 'stock'
+  const u = window._USER || {};
+  if (u.role === 'admin') return true;
+  if (u.role === 'region'){
+    if (scope === 'stock') return true;                  // can adjust stock
+    if (scope === u.region) return true;                 // their region's vendor/lead/etc
+    if (scope === 'shared') return false;                // shared fields view-only
+    return false;                                        // other regions' fields: no
+  }
+  return false;
+}
+function _canBulkUpload(){ return (window._USER||{}).role === 'admin'; }
+function _isAdmin(){ return (window._USER||{}).role === 'admin'; }
+
 (async function _init() {
   try {
     // wait for the Firebase modular SDK (loaded as a module in <head>) to be ready
-    if (!window._FS) {
+    if (!window._FS || !window._authApi) {
       await new Promise(res => {
-        if (window._FS) return res();
+        if (window._FS && window._authApi) return res();
         window.addEventListener('firebase-ready', res, { once: true });
         // safety timeout fallback
         setTimeout(res, 8000);
@@ -1560,6 +1758,39 @@ function computeAdjusted(closing, adjustment) {
     }
     if (!window._FS) throw new Error('Firebase did not initialize');
 
+    _wireLogin();
+
+    // Gate everything behind auth. onAuthStateChanged fires on load + after login/logout.
+    const { auth, onAuthStateChanged } = window._authApi;
+    let _booted = false;
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { _showLogin(); return; }
+      // Logged in — load their profile (region + role)
+      const profile = await _loadUserProfile(user.uid, user.email);
+      if (profile._missing || (!profile.region && profile.role !== 'admin')) {
+        // Authenticated but no region/role assigned → deny, sign out
+        await window._authApi.signOut(auth);
+        _showLogin('Your account has no access assigned. Contact the admin.');
+        return;
+      }
+      window._USER = profile;
+      _hideLogin();
+      if (_booted) { location.reload(); return; } // re-login as different user → reload clean
+      _booted = true;
+      // show the loading overlay now and proceed to load data
+      const ld = document.getElementById('loading-overlay');
+      if (ld) ld.style.display = '';
+      await _bootApp();
+    });
+  } catch (err) {
+    console.error(err);
+    _showLogin('Could not connect. Refresh and try again.');
+  }
+})();
+
+// The actual data-load + dashboard build (runs only after successful auth).
+async function _bootApp() {
+  try {
     let mats, vms, cons, live, ubuf;
     const cached = _loadCache();
     if (cached) {
@@ -1735,10 +1966,24 @@ function computeAdjusted(closing, adjustment) {
       };
     });
 
+    // ===== REGION ISOLATION (Phase 1, UI-level) =====
+    // Region users only keep items their region stocks. Admin keeps everything.
+    if (window._USER && window._USER.role === 'region' && window._USER.region) {
+      const cityField = _regionToCity(window._USER.region);
+      if (cityField) {
+        DATA = DATA.filter(r => {
+          const v = r[cityField];
+          return v && String(v).trim() !== '' && String(v).trim().toLowerCase() !== 'discontinued';
+        });
+      }
+      console.log(`[ACCESS] Region ${window._USER.region}: ${DATA.length} items visible.`);
+    }
+
     _prog(100, 'Ready!');
     setTimeout(() => {
       const ov = document.getElementById('loading-overlay');
       if (ov) ov.classList.add('hidden');
+      _applyUserAccessUI();
       populateMenus();
       renderTable();
     }, 350);
@@ -1748,7 +1993,7 @@ function computeAdjusted(closing, adjustment) {
     if (txt) txt.textContent = 'Error: ' + err.message;
     console.error('Firestore load error:', err);
   }
-})();
+}
 
 
 /* ══════════════════════════════════════════════════════════════
@@ -1922,7 +2167,7 @@ function _adjModalHTML() {
         </div>
         <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px">
           <div style="flex:0 0 130px">
-            <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">Adjust count (+/-)</label>
+            <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">Amount (+/-)</label>
             <input id="adj-amount" type="number" placeholder="e.g. 25 or -10" style="width:100%;padding:9px;border:1px solid var(--border-2);border-radius:6px;font-size:15px">
           </div>
           <div style="flex:1">
@@ -2015,12 +2260,16 @@ function _editModalHTML() {
 }
 
 let _editSku = null;
-function _ef(label, id, val, hint) {
+function _ef(label, id, val, hint, editable) {
+  if (editable === false && _efHide) return '';   // (not used directly; see scoped versions)
+  const ro = editable === false;
+  const lockNote = ro ? ' <span style="color:var(--text-4);font-size:10px">🔒 view only</span>' : '';
   return `<div style="margin-bottom:14px">
-    <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">${label}${hint?` <span style="color:var(--text-4)">${hint}</span>`:''}</label>
-    <input id="${id}" value="${val==null?'':String(val).replace(/"/g,'&quot;')}" style="width:100%;padding:9px;border:1px solid var(--border-2);border-radius:6px;font-size:14px">
+    <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">${label}${hint?` <span style="color:var(--text-4)">${hint}</span>`:''}${lockNote}</label>
+    <input id="${id}" value="${val==null?'':String(val).replace(/"/g,'&quot;')}" ${ro?'disabled':''} style="width:100%;padding:9px;border:1px solid var(--border-2);border-radius:6px;font-size:14px;${ro?'background:#f1f2f4;color:#6B7280;':''}">
   </div>`;
 }
+let _efHide = false;
 // Normalize any date-ish value to YYYY-MM-DD for the date input
 function _toISODate(v){
   if(v==null||v==='') return '';
@@ -2031,10 +2280,12 @@ function _toISODate(v){
   if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
   return '';  // unparseable -> leave blank in picker (original kept until changed)
 }
-function _efDate(label, id, val, hint) {
+function _efDate(label, id, val, hint, editable) {
+  const ro = editable === false;
+  const lockNote = ro ? ' <span style="color:var(--text-4);font-size:10px">🔒 view only</span>' : '';
   return `<div style="margin-bottom:14px">
-    <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">${label}${hint?` <span style="color:var(--text-4)">${hint}</span>`:''}</label>
-    <input type="date" id="${id}" value="${_toISODate(val)}" style="width:100%;padding:9px;border:1px solid var(--border-2);border-radius:6px;font-size:14px">
+    <label style="font-size:12px;color:var(--text-3);display:block;margin-bottom:4px">${label}${hint?` <span style="color:var(--text-4)">${hint}</span>`:''}${lockNote}</label>
+    <input type="date" id="${id}" value="${_toISODate(val)}" ${ro?'disabled':''} style="width:100%;padding:9px;border:1px solid var(--border-2);border-radius:6px;font-size:14px;${ro?'background:#f1f2f4;color:#6B7280;':''}">
   </div>`;
 }
 
@@ -2045,47 +2296,58 @@ function openEditModal(sku) {
   document.getElementById('edit-title').textContent = 'Edit — ' + sku;
   document.getElementById('edit-sub').textContent = r.description || '';
   const body = document.getElementById('edit-body');
+  const _shared = _canEditField('shared');   // false for region users
+  const _eBLR = _canEditField('BLR'), _eCHN = _canEditField('CHN'), _eHYD = _canEditField('HYD'),
+        _eNCR = _canEditField('NCR'), _ePUN = _canEditField('PUN');
+  // for region users, only show their own region's vendor block
+  const _u = window._USER || {};
+  const _showRegion = (code) => (_u.role === 'admin') || (_u.region === code);
+  const _blrBlock = _showRegion('BLR') ? `
+    ${_ef('BLR Vendor','ed-blr',r._blr_vendor_raw,'format: Name-LeadTime e.g. Canvera-3', _eBLR)}
+    ${_ef('BLR Vendor 2','ed-blr2',r.blr_v2, '', _eBLR)}
+    ${_ef('BLR HUB Capacity','ed-hubcap',r.blr_hub_capacity, '', _eBLR)}` : '';
+  const _ncrBlock = _showRegion('NCR') ? `
+    ${_ef('NCR Vendor','ed-ncr',r.regions.NCR.vendor, '', _eNCR)}
+    ${_ef('NCR Vendor 2','ed-ncr2',r.ncr_v2, '', _eNCR)}
+    ${_ef('NCR Lead time (days)','ed-ncr-lt',r.regions.NCR.lead_time, '', _eNCR)}` : '';
+  const _hydBlock = _showRegion('HYD') ? `
+    ${_ef('HYD Vendor','ed-hyd',r.regions.HYD.vendor, '', _eHYD)}
+    ${_ef('HYD Lead time (days)','ed-hyd-lt',r.regions.HYD.lead_time, '', _eHYD)}` : '';
+  const _chnBlock = _showRegion('CHN') ? `
+    ${_ef('CHN Vendor','ed-chn',r.regions.CHN.vendor, '', _eCHN)}
+    ${_ef('CHN Vendor 2','ed-chn2',r.chn_v2, '', _eCHN)}
+    ${_ef('CHN Lead time (days)','ed-chn-lt',r.regions.CHN.lead_time, '', _eCHN)}` : '';
   body.innerHTML = `
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin-bottom:8px">Material Details</div>
-    ${_ef('Material Description','ed-desc',r.description)}
-    ${_ef('UOM','ed-uom',r.uom)}
-    ${_ef('Material Category Desc','ed-catdesc',r.category_desc)}
-    ${_ef('Category','ed-category',r.category)}
-    ${_ef('Major Category','ed-major',r.major_category)}
-    ${_ef('Classification','ed-classification',r.classification)}
-    ${_ef('Type','ed-type',r.type)}
-    ${_ef('Criticality','ed-criticality',r.criticality,'V.High / High / Med / Low')}
-    ${_ef('Reorder Type','ed-reorder',r.str_reorder_type)}
-    ${_ef('Category Manager','ed-catmgr',r.cat_manager)}
-    ${_ef('Cities (B C H P D)','ed-cities',[r.blr,r.chn,r.hyd,r.pun,r.ncr].filter(Boolean).join(' '),'space-separated letters present')}
+    ${_ef('Material Description','ed-desc',r.description, '', _shared)}
+    ${_ef('UOM','ed-uom',r.uom, '', _shared)}
+    ${_ef('Material Category Desc','ed-catdesc',r.category_desc, '', _shared)}
+    ${_ef('Category','ed-category',r.category, '', _shared)}
+    ${_ef('Major Category','ed-major',r.major_category, '', _shared)}
+    ${_ef('Classification','ed-classification',r.classification, '', _shared)}
+    ${_ef('Type','ed-type',r.type, '', _shared)}
+    ${_ef('Criticality','ed-criticality',r.criticality,'V.High / High / Med / Low', _shared)}
+    ${_ef('Reorder Type','ed-reorder',r.str_reorder_type, '', _shared)}
+    ${_ef('Category Manager','ed-catmgr',r.cat_manager, '', _shared)}
+    ${_ef('Cities (B C H P D)','ed-cities',[r.blr,r.chn,r.hyd,r.pun,r.ncr].filter(Boolean).join(' '),'space-separated letters present', _shared)}
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Pricing & Order</div>
-    ${_ef('Unit Price (₹)','ed-price',r.unit_price)}
-    ${_ef('Supplier MOQ','ed-moq',r.supplier_moq)}
-    ${_ef('Distrbn MOQ','ed-dmoq',r.min_distrbn_qty)}
-    ${_ef('BLR HUB Capacity','ed-hubcap',r.blr_hub_capacity)}
+    ${_ef('Unit Price (₹)','ed-price',r.unit_price, '', _shared)}
+    ${_ef('Supplier MOQ','ed-moq',r.supplier_moq, '', _shared)}
+    ${_ef('Distrbn MOQ','ed-dmoq',r.min_distrbn_qty, '', _shared)}
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Season</div>
-    ${_ef('Season','ed-season',r.season)}
-    ${_ef('Seasonal Consumption','ed-seasoncons',r.seasonal_consumption)}
-    ${_efDate('Launch Start Date','ed-launch-start',r.launch_start)}
-    ${_efDate('Launch End Date','ed-launch-end',r.launch_end)}
-    ${_ef('Ratelist Name','ed-ratelist',r.ratelist_name)}
-    ${_ef('Product SKU','ed-productsku',r.product_sku)}
-    <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Vendors</div>
-    ${_ef('BLR Vendor','ed-blr',r._blr_vendor_raw,'format: Name-LeadTime e.g. Canvera-3')}
-    ${_ef('BLR Vendor 2','ed-blr2',r.blr_v2)}
-    ${_ef('NCR Vendor','ed-ncr',r.regions.NCR.vendor)}
-    ${_ef('NCR Vendor 2','ed-ncr2',r.ncr_v2)}
-    ${_ef('NCR Lead time (days)','ed-ncr-lt',r.regions.NCR.lead_time)}
-    ${_ef('HYD Vendor','ed-hyd',r.regions.HYD.vendor)}
-    ${_ef('HYD Lead time (days)','ed-hyd-lt',r.regions.HYD.lead_time)}
-    ${_ef('CHN Vendor','ed-chn',r.regions.CHN.vendor)}
-    ${_ef('CHN Vendor 2','ed-chn2',r.chn_v2)}
-    ${_ef('CHN Lead time (days)','ed-chn-lt',r.regions.CHN.lead_time)}
+    ${_ef('Season','ed-season',r.season, '', _shared)}
+    ${_ef('Seasonal Consumption','ed-seasoncons',r.seasonal_consumption, '', _shared)}
+    ${_efDate('Launch Start Date','ed-launch-start',r.launch_start, '', _shared)}
+    ${_efDate('Launch End Date','ed-launch-end',r.launch_end, '', _shared)}
+    ${_ef('Ratelist Name','ed-ratelist',r.ratelist_name, '', _shared)}
+    ${_ef('Product SKU','ed-productsku',r.product_sku, '', _shared)}
+    <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Vendors${_u.role==='region'?' — '+_u.region:''}</div>
+    ${_blrBlock}${_ncrBlock}${_hydBlock}${_chnBlock}
     <div style="display:flex;gap:8px;margin-top:18px">
       <button id="edit-save" style="background:var(--navy);color:#fff;border:none;padding:9px 20px;border-radius:6px;font-weight:600;cursor:pointer">Save Changes</button>
       <span id="edit-msg" style="font-size:12px;align-self:center"></span>
     </div>
-    <div style="font-size:11px;color:var(--text-4);margin-top:10px">BLR lead time is read from the vendor suffix (Canvera-3 → 3 days). NCR/HYD/CHN lead times are separate fields above.</div>`;
+    <div style="font-size:11px;color:var(--text-4);margin-top:10px">Fields marked 🔒 are managed by the admin. BLR lead time is read from the vendor suffix (Canvera-3 → 3 days).</div>`;
   document.getElementById('edit-modal').style.display = 'flex';
 }
 
@@ -2106,76 +2368,88 @@ document.addEventListener('click', async (e) => {
     }));
     try {
       const edits = [];
-      // --- Material Details fields ---
-      const _md = {
-        material_description: document.getElementById('ed-desc').value.trim(),
-        uom: document.getElementById('ed-uom').value.trim(),
-        material_category_desc: document.getElementById('ed-catdesc').value.trim(),
-        category: document.getElementById('ed-category').value.trim(),
-        major_category: document.getElementById('ed-major').value.trim(),
-        classification: document.getElementById('ed-classification').value.trim(),
-        type: document.getElementById('ed-type').value.trim(),
-        criticality: document.getElementById('ed-criticality').value.trim(),
-        str_reorder_type: document.getElementById('ed-reorder').value.trim(),
-        cat_mgr: document.getElementById('ed-catmgr').value.trim(),
+      // null-safe getter: returns null if the field is missing OR disabled (so we never
+      // write a value the user wasn't allowed to edit, and never crash on hidden blocks)
+      const _gv = (id) => {
+        const el = document.getElementById(id);
+        if (!el || el.disabled) return null;
+        return el.value;
+      };
+      const _gvt = (id) => { const v=_gv(id); return v==null?null:v.trim(); };
+      // --- Material Details fields (shared; only present/enabled for admin) ---
+      const _mdRaw = {
+        material_description: _gvt('ed-desc'),
+        uom: _gvt('ed-uom'),
+        material_category_desc: _gvt('ed-catdesc'),
+        category: _gvt('ed-category'),
+        major_category: _gvt('ed-major'),
+        classification: _gvt('ed-classification'),
+        type: _gvt('ed-type'),
+        criticality: _gvt('ed-criticality'),
+        str_reorder_type: _gvt('ed-reorder'),
+        cat_mgr: _gvt('ed-catmgr'),
       };
       const _mdCur = {
         material_description: r.description, uom: r.uom, material_category_desc: r.category_desc,
         category: r.category, major_category: r.major_category, classification: r.classification,
         type: r.type, criticality: r.criticality, str_reorder_type: r.str_reorder_type, cat_mgr: r.cat_manager,
       };
-      Object.keys(_md).forEach(f => {
-        if (_md[f] !== String(_mdCur[f] ?? '')) edits.push(editMaterialField(_editSku, f, _md[f]||null));
+      Object.keys(_mdRaw).forEach(f => {
+        if (_mdRaw[f] === null) return;  // field absent/disabled — skip
+        if (_mdRaw[f] !== String(_mdCur[f] ?? '')) edits.push(editMaterialField(_editSku, f, _mdRaw[f]||null));
       });
-      // cities: parse the space-separated letters back to blr/chn/hyd/pun/ncr
-      const _citiesRaw = document.getElementById('ed-cities').value.toUpperCase();
-      const _cityMap = {B:'blr',C:'chn',H:'hyd',P:'pun',D:'ncr'};
-      Object.entries(_cityMap).forEach(([letter,field])=>{
-        const present = _citiesRaw.includes(letter) ? letter : null;
-        const cur = r[field] || null;
-        if ((present||'') !== (cur||'')) edits.push(editMaterialField(_editSku, field, present));
-      });
-      const price = document.getElementById('ed-price').value;
-      const moq   = document.getElementById('ed-moq').value;
-      const blr   = document.getElementById('ed-blr').value.trim();
-      const ncr   = document.getElementById('ed-ncr').value.trim();
-      const hyd   = document.getElementById('ed-hyd').value.trim();
-      const chn   = document.getElementById('ed-chn').value.trim();
-      const ncrLt = document.getElementById('ed-ncr-lt').value;
-      const hydLt = document.getElementById('ed-hyd-lt').value;
-      const chnLt = document.getElementById('ed-chn-lt').value;
-      const dmoq  = document.getElementById('ed-dmoq').value;
-      const hubcap= document.getElementById('ed-hubcap').value;
-      const season= document.getElementById('ed-season').value.trim();
-      const scons = document.getElementById('ed-seasoncons').value;
-      const launchStart= document.getElementById('ed-launch-start').value.trim();
-      const launchEnd= document.getElementById('ed-launch-end').value.trim();
-      const ratelist=document.getElementById('ed-ratelist').value.trim();
-      const productsku=document.getElementById('ed-productsku').value.trim();
-      const blr2  = document.getElementById('ed-blr2').value.trim();
-      const ncr2  = document.getElementById('ed-ncr2').value.trim();
-      const chn2  = document.getElementById('ed-chn2').value.trim();
+      // cities: parse the space-separated letters back to blr/chn/hyd/pun/ncr (admin only)
+      const _citiesV = _gv('ed-cities');
+      if (_citiesV !== null) {
+        const _citiesRaw = _citiesV.toUpperCase();
+        const _cityMap = {B:'blr',C:'chn',H:'hyd',P:'pun',D:'ncr'};
+        Object.entries(_cityMap).forEach(([letter,field])=>{
+          const present = _citiesRaw.includes(letter) ? letter : null;
+          const cur = r[field] || null;
+          if ((present||'') !== (cur||'')) edits.push(editMaterialField(_editSku, field, present));
+        });
+      }
+      const price = _gv('ed-price');
+      const moq   = _gv('ed-moq');
+      const blr   = _gvt('ed-blr');
+      const ncr   = _gvt('ed-ncr');
+      const hyd   = _gvt('ed-hyd');
+      const chn   = _gvt('ed-chn');
+      const ncrLt = _gv('ed-ncr-lt');
+      const hydLt = _gv('ed-hyd-lt');
+      const chnLt = _gv('ed-chn-lt');
+      const dmoq  = _gv('ed-dmoq');
+      const hubcap= _gv('ed-hubcap');
+      const season= _gvt('ed-season');
+      const scons = _gv('ed-seasoncons');
+      const launchStart= _gvt('ed-launch-start');
+      const launchEnd= _gvt('ed-launch-end');
+      const ratelist=_gvt('ed-ratelist');
+      const productsku=_gvt('ed-productsku');
+      const blr2  = _gvt('ed-blr2');
+      const ncr2  = _gvt('ed-ncr2');
+      const chn2  = _gvt('ed-chn2');
 
-      if (dmoq !== String(r.min_distrbn_qty ?? '')) edits.push(editMaterialField(_editSku,'min_distrbn_qty', dmoq===''?null:parseFloat(dmoq)));
-      if (hubcap !== String(r.blr_hub_capacity ?? '')) edits.push(editMaterialField(_editSku,'blr_hub_capacity', hubcap===''?null:parseFloat(hubcap)));
-      if (season !== String(r.season ?? '')) edits.push(editMaterialField(_editSku,'season', season||null));
-      if (launchStart !== String(r.launch_start ?? '')) edits.push(editMaterialField(_editSku,'launch_start', launchStart||null));
-      if (launchEnd !== String(r.launch_end ?? '')) edits.push(editMaterialField(_editSku,'launch_end', launchEnd||null));
-      if (ratelist !== String(r.ratelist_name ?? '')) edits.push(editMaterialField(_editSku,'ratelist_name', ratelist||null));
-      if (productsku !== String(r.product_sku ?? '')) edits.push(editMaterialField(_editSku,'product_sku', productsku||null));
-      if (blr2 !== String(r.blr_v2 ?? '')) edits.push(editMaterialField(_editSku,'blr_v2', blr2||null));
-      if (ncr2 !== String(r.ncr_v2 ?? '')) edits.push(editMaterialField(_editSku,'ncr_v2', ncr2||null));
-      if (chn2 !== String(r.chn_v2 ?? '')) edits.push(editMaterialField(_editSku,'chn_v2', chn2||null));
-      if (scons !== String(r.seasonal_consumption ?? '')) edits.push(editVmField(_editSku,'seasonal_consumption', scons===''?null:parseFloat(scons)));
-      if (price !== String(r.unit_price ?? '')) edits.push(editMaterialField(_editSku,'unit_price', price===''?null:parseFloat(price)));
-      if (moq !== String(r.supplier_moq ?? '')) edits.push(editMaterialField(_editSku,'supplier_moq', moq===''?null:(isNaN(parseFloat(moq))?moq:parseFloat(moq))));
-      if (blr !== String(r._blr_vendor_raw ?? '')) edits.push(editMaterialField(_editSku,'blr_v1', blr||null));
-      if (ncr !== String(r.regions.NCR.vendor ?? '')) edits.push(editMaterialField(_editSku,'ncr_v1', ncr||null));
-      if (hyd !== String(r.regions.HYD.vendor ?? '')) edits.push(editMaterialField(_editSku,'hyd_v1', hyd||null));
-      if (chn !== String(r.regions.CHN.vendor ?? '')) edits.push(editMaterialField(_editSku,'chn_v1', chn||null));
-      if (ncrLt !== String(r.regions.NCR.lead_time ?? '')) edits.push(editMaterialField(_editSku,'ncr_lead_time', ncrLt===''?null:parseFloat(ncrLt)));
-      if (hydLt !== String(r.regions.HYD.lead_time ?? '')) edits.push(editMaterialField(_editSku,'hyd_lead_time', hydLt===''?null:parseFloat(hydLt)));
-      if (chnLt !== String(r.regions.CHN.lead_time ?? '')) edits.push(editMaterialField(_editSku,'chn_lead_time', chnLt===''?null:parseFloat(chnLt)));
+      if (dmoq !== null && dmoq !== String(r.min_distrbn_qty ?? '')) edits.push(editMaterialField(_editSku,'min_distrbn_qty', dmoq===''?null:parseFloat(dmoq)));
+      if (hubcap !== null && hubcap !== String(r.blr_hub_capacity ?? '')) edits.push(editMaterialField(_editSku,'blr_hub_capacity', hubcap===''?null:parseFloat(hubcap)));
+      if (season !== null && season !== String(r.season ?? '')) edits.push(editMaterialField(_editSku,'season', season||null));
+      if (launchStart !== null && launchStart !== String(r.launch_start ?? '')) edits.push(editMaterialField(_editSku,'launch_start', launchStart||null));
+      if (launchEnd !== null && launchEnd !== String(r.launch_end ?? '')) edits.push(editMaterialField(_editSku,'launch_end', launchEnd||null));
+      if (ratelist !== null && ratelist !== String(r.ratelist_name ?? '')) edits.push(editMaterialField(_editSku,'ratelist_name', ratelist||null));
+      if (productsku !== null && productsku !== String(r.product_sku ?? '')) edits.push(editMaterialField(_editSku,'product_sku', productsku||null));
+      if (blr2 !== null && blr2 !== String(r.blr_v2 ?? '')) edits.push(editMaterialField(_editSku,'blr_v2', blr2||null));
+      if (ncr2 !== null && ncr2 !== String(r.ncr_v2 ?? '')) edits.push(editMaterialField(_editSku,'ncr_v2', ncr2||null));
+      if (chn2 !== null && chn2 !== String(r.chn_v2 ?? '')) edits.push(editMaterialField(_editSku,'chn_v2', chn2||null));
+      if (scons !== null && scons !== String(r.seasonal_consumption ?? '')) edits.push(editVmField(_editSku,'seasonal_consumption', scons===''?null:parseFloat(scons)));
+      if (price !== null && price !== String(r.unit_price ?? '')) edits.push(editMaterialField(_editSku,'unit_price', price===''?null:parseFloat(price)));
+      if (moq !== null && moq !== String(r.supplier_moq ?? '')) edits.push(editMaterialField(_editSku,'supplier_moq', moq===''?null:(isNaN(parseFloat(moq))?moq:parseFloat(moq))));
+      if (blr !== null && blr !== String(r._blr_vendor_raw ?? '')) edits.push(editMaterialField(_editSku,'blr_v1', blr||null));
+      if (ncr !== null && ncr !== String(r.regions.NCR.vendor ?? '')) edits.push(editMaterialField(_editSku,'ncr_v1', ncr||null));
+      if (hyd !== null && hyd !== String(r.regions.HYD.vendor ?? '')) edits.push(editMaterialField(_editSku,'hyd_v1', hyd||null));
+      if (chn !== null && chn !== String(r.regions.CHN.vendor ?? '')) edits.push(editMaterialField(_editSku,'chn_v1', chn||null));
+      if (ncrLt !== null && ncrLt !== String(r.regions.NCR.lead_time ?? '')) edits.push(editMaterialField(_editSku,'ncr_lead_time', ncrLt===''?null:parseFloat(ncrLt)));
+      if (hydLt !== null && hydLt !== String(r.regions.HYD.lead_time ?? '')) edits.push(editMaterialField(_editSku,'hyd_lead_time', hydLt===''?null:parseFloat(hydLt)));
+      if (chnLt !== null && chnLt !== String(r.regions.CHN.lead_time ?? '')) edits.push(editMaterialField(_editSku,'chn_lead_time', chnLt===''?null:parseFloat(chnLt)));
 
       await Promise.all(edits);
       msg.style.color = 'var(--green)'; msg.textContent = edits.length ? `Saved ${edits.length} change(s) ✓` : 'No changes';
@@ -3121,6 +3395,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.body.insertAdjacentHTML('beforeend', _uploadModalHTML());
   const openBtn = document.getElementById('bulk-upload-btn');
   if (openBtn) openBtn.addEventListener('click', () => {
+    if (!_canBulkUpload()) { alert('Bulk upload is admin-only.'); return; }
     _uploadParsed = null;
     document.getElementById('upload-preview').innerHTML = '';
     document.getElementById('upload-filename').textContent = '';
