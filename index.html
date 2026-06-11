@@ -875,6 +875,7 @@
         <option value="commercial">Commercial</option>
         <option value="inventory">Inventory</option>
         <option value="region">Region users (all regions)</option>
+        <option value="region_inventory">Region Inventory (per-region inventory teams)</option>
       </select>
       <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px">Editable fields <span id="perms-count" style="color:#9CA3AF;font-weight:400"></span></div>
       <div id="perms-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;max-height:340px;overflow:auto;padding:4px 2px"></div>
@@ -884,7 +885,7 @@
         <button id="perms-clearall" style="background:#f1f2f4;color:#374151;border:none;padding:10px 16px;border-radius:8px;font-weight:500;cursor:pointer">Clear all</button>
         <span id="perms-msg" style="font-size:13px;margin-left:6px"></span>
       </div>
-      <div style="font-size:11px;color:#9CA3AF;margin-top:12px">Note: Region users always keep edit access to their own region's vendor block + stock, regardless of these toggles. Changes apply when each user next loads the tool.</div>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:12px">Note: Region users always keep edit access to their own region's vendor block, regardless of these toggles. Stock adjust + bulk toggles apply per role. Region Inventory users see only their own region's items. Changes apply when each user next loads the tool.</div>
     </div>
   </div>
 </div>
@@ -1239,7 +1240,7 @@ function renderHead(){
 function regionMatrixHTML(r){
   // Region users see only their own region's card; admin sees all.
   const _u = window._USER || {};
-  const _regionsToShow = (_u.role === 'region' && _u.region)
+  const _regionsToShow = ((_u.role === 'region' || _u.role === 'region_inventory') && _u.region)
     ? REGIONS.filter(reg => reg.key === _u.region)
     : REGIONS;
   return`<div class="region-matrix">${_regionsToShow.map(reg=>{
@@ -1297,7 +1298,7 @@ function rowHTML(r,idx){
     </dl>
     <div style="margin-top:12px;display:flex;gap:8px">
       <button class="adjust-btn" onclick="openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Adjust Stock</button>
-      <button class="edit-item-btn" onclick="openEditModal('${r.sku}')" style="background:var(--surface-2);color:var(--navy);border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Edit Item</button>
+      <button class="edit-item-btn" onclick="openEditModal('${r.sku}')" style="background:var(--orange);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Edit Item</button>
     </div></div>
     <div class="detail-section"><h5>Stock Parameters</h5>
     <dl class="detail-grid">
@@ -1429,7 +1430,7 @@ document.body.addEventListener("click",(e)=>{
   if(tab){
     const id=tab.dataset.menu;
     // Region users cannot open the Region menu (locked to their region)
-    if(id==='regions' && (window._USER||{}).role==='region'){ return; }
+    if(id==='regions' && ['region','region_inventory'].includes((window._USER||{}).role)){ return; }
     if(openMenuId===id)closeAllMenus();else openMenu(id,tab);return}
   const directTab=e.target.closest('.tab[data-tab]');
   if(directTab){
@@ -1445,7 +1446,7 @@ document.body.addEventListener("click",(e)=>{
     else if(action==="category"){state.category=value;const r=DATA.find(d=>d.category===value);if(r)state.major=r.major_category}
     else if(action==="region"){
       // Region users are locked to their own region — ignore attempts to switch
-      if((window._USER||{}).role==='region'){ closeAllMenus(); return; }
+      if(['region','region_inventory'].includes((window._USER||{}).role)){ closeAllMenus(); return; }
       closeAllMenus();
       showRegionDashboard(value);
       return;
@@ -1675,11 +1676,12 @@ async function _loadUserProfile(uid, email){
     return { uid, email, region:null, role:null, _missing:true };
   }
   const rawRole = (prof.role || '').toLowerCase().trim();
-  const VALID_ROLES = ['admin','procurement','commercial','inventory','region'];
+  const VALID_ROLES = ['admin','procurement','commercial','inventory','region','region_inventory'];
   const role = VALID_ROLES.includes(rawRole) ? rawRole : 'region';
   const region = prof.region ? String(prof.region).toUpperCase().trim() : null;
-  // region only matters for 'region' role; team/admin roles see all regions
-  return { uid, email, region: (role==='region' ? region : (region||null)), role };
+  // region matters for the two region-scoped roles; team/admin roles see all regions
+  const _regionScoped = (role === 'region' || role === 'region_inventory');
+  return { uid, email, region: (_regionScoped ? region : (region||null)), role };
 }
 
 function _showLogin(errMsg){
@@ -1757,6 +1759,12 @@ function _applyUserAccessUI(){
     document.body.setAttribute('data-team', u.role);
     // teams that are view-only (commercial/inventory for now) get an extra class
     if (!_canEditAnything()) document.body.classList.add('role-viewonly');
+  } else if (u.role === 'region_inventory'){
+    if (badge){ badge.style.display=''; badge.textContent=(u.region||'')+' INVENTORY'; badge.style.background='#0E7C66'; }
+    if (chip) chip.title = email + ' (' + (u.region||'') + ' Inventory)';
+    document.body.classList.add('role-region');   // same UI gating as region users (admin-only buttons hidden via CSS)
+    document.body.setAttribute('data-region', u.region||'');
+    if (!_canEditAnything()) document.body.classList.add('role-viewonly');
   } else {
     if (badge && u.region){ badge.style.display=''; badge.textContent=u.region; }
     if (chip) chip.title = email + ' (' + (u.region||'') + ')';
@@ -1786,9 +1794,9 @@ function _applyUserAccessUI(){
     if (el) el.style.display = _isAdmin() ? '' : 'none';
   });
 
-  // Region users are locked to one region — hide the Region filter menu/tab.
-  // Team users (procurement/commercial/inventory) and admin keep all regions.
-  if (u.role === 'region'){
+  // Region-scoped users (region + region_inventory) are locked to one region —
+  // hide the Region filter menu/tab. Team users and admin keep all regions.
+  if (u.role === 'region' || u.role === 'region_inventory'){
     document.querySelectorAll('[data-menu="regions"], #menu-regions').forEach(el => { el.style.display='none'; });
     // Lock the active filter to their region so the table/views only ever show their region
     if (typeof state === 'object' && state) {
@@ -1801,9 +1809,9 @@ function _canEditAnything(){
   const r = (window._USER||{}).role;
   if (r === 'admin' || r === 'region') return true;
   if (r === 'procurement') return true;
-  if (r === 'commercial' || r === 'inventory'){
+  if (r === 'commercial' || r === 'inventory' || r === 'region_inventory'){
     const s = TEAM_EDITABLE_FIELDS[r];
-    return !!(s && s.size > 0);   // includes stock/bulk_upload, so they won't be 'view-only'
+    return !!(s && s.size > 0);   // includes stock/bulk_adjust, so they won't be 'view-only'
   }
   return false;
 }
@@ -1843,7 +1851,7 @@ const FIELD_CATALOG = [
   { key:'bulk_upload', label:'⚙ Bulk upload access' },
   { key:'bulk_adjust', label:'⚙ Bulk adjustment upload' },
 ];
-const PERM_ROLES = ['procurement','commercial','inventory','region'];
+const PERM_ROLES = ['procurement','commercial','inventory','region','region_inventory'];
 
 // DEFAULT permissions (used if none saved in Firestore yet). Admin can override via the UI.
 const DEFAULT_PERMISSIONS = {
@@ -1859,6 +1867,8 @@ const DEFAULT_PERMISSIONS = {
   inventory:  ['min_distrbn_qty','stock','bulk_adjust'],   // Distrbn MOQ + adjust stock + bulk ADJUSTMENT upload (no materials bulk upload)
   // region users: their own region's vendor (always) + stock adjustments
   region: ['stock'],
+  // per-region inventory team: adjust stock + bulk adjustment upload (their region's items only)
+  region_inventory: ['stock','bulk_adjust'],
 };
 
 // Live permission sets (populated from Firestore at boot; falls back to defaults).
@@ -1867,6 +1877,7 @@ let TEAM_EDITABLE_FIELDS = {
   commercial:  new Set(DEFAULT_PERMISSIONS.commercial),
   inventory:   new Set(DEFAULT_PERMISSIONS.inventory),
   region:      new Set(DEFAULT_PERMISSIONS.region),
+  region_inventory: new Set(DEFAULT_PERMISSIONS.region_inventory),
 };
 
 // Load saved permissions from Firestore (config/permissions). Safe fallback to defaults.
@@ -1901,8 +1912,8 @@ function _canEditField(scope, fieldKey){
     return allow.has(key);                         // any extra fields admin granted to region
   }
 
-  // Team users: field-level allow-list, all regions
-  if (role === 'procurement' || role === 'commercial' || role === 'inventory'){
+  // Team users + region_inventory: field-level allow-list
+  if (role === 'procurement' || role === 'commercial' || role === 'inventory' || role === 'region_inventory'){
     const allow = TEAM_EDITABLE_FIELDS[role] || new Set();
     if (scope === 'stock') return allow.has('stock');
     const key = fieldKey || scope;
@@ -1930,7 +1941,7 @@ function _canBulkAdjust(){
 }
 function _isAdmin(){ return (window._USER||{}).role === 'admin'; }
 // Does this user see all regions (admin + all team roles) or just one (region users)?
-function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'; }
+function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region' && r!=='region_inventory'; }
 
 (async function _init() {
   try {
@@ -1957,7 +1968,7 @@ function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'
       const _teamRoles = ['admin','procurement','commercial','inventory'];
       const _hasAccess = profile.role && (
         _teamRoles.includes(profile.role) ||           // team/admin: no region needed
-        (profile.role === 'region' && profile.region)  // region user: needs a region
+        ((profile.role === 'region' || profile.role === 'region_inventory') && profile.region)  // region-scoped roles: need a region
       );
       if (profile._missing || !_hasAccess) {
         // Authenticated but no valid role/region assigned → deny, sign out
@@ -2160,8 +2171,8 @@ async function _bootApp() {
     });
 
     // ===== REGION ISOLATION (Phase 1, UI-level) =====
-    // Region users only keep items their region stocks. Admin keeps everything.
-    if (window._USER && window._USER.role === 'region' && window._USER.region) {
+    // Region-scoped users (region + region_inventory) only keep items their region stocks.
+    if (window._USER && (window._USER.role === 'region' || window._USER.role === 'region_inventory') && window._USER.region) {
       const cityField = _regionToCity(window._USER.region);
       if (cityField) {
         DATA = DATA.filter(r => {
@@ -2537,7 +2548,7 @@ function openEditModal(sku) {
     ${_efDate('Launch End Date','ed-launch-end',r.launch_end, '', P('launch_end'))}
     ${_ef('Ratelist Name','ed-ratelist',r.ratelist_name, '', P('ratelist_name'))}
     ${_ef('Product SKU','ed-productsku',r.product_sku, '', P('product_sku'))}
-    <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Vendors${_u.role==='region'?' — '+_u.region:''}</div>
+    <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Vendors${(_u.role==='region'||_u.role==='region_inventory')?' — '+_u.region:''}</div>
     ${_blrBlock}${_ncrBlock}${_hydBlock}${_chnBlock}
     <div style="display:flex;gap:8px;margin-top:18px">
       <button id="edit-save" style="background:var(--navy);color:#fff;border:none;padding:9px 20px;border-radius:6px;font-weight:600;cursor:pointer">Save Changes</button>
@@ -3680,7 +3691,7 @@ function _adjUploadModalHTML() {
       </div>
       <div style="padding:22px" id="adj-upload-body">
         <ol style="font-size:13px;color:var(--text-2);line-height:1.7;margin:0 0 16px 18px;padding:0">
-          <li>Download the template — 3 columns: <b>SKU</b>, <b>Adjustment</b>, <b>Reason</b>.</li>
+          <li>Download the template — columns: <b>SKU</b>, <b>Description</b> (reference only), <b>Adjustment</b>, <b>Reason</b>. Matching is by SKU.</li>
           <li>Adjustment is <b>+/- change</b> (e.g. <b>25</b> adds 25, <b>-10</b> subtracts 10). It is NOT the final count.</li>
           <li>Upload the file — you'll see a preview, nothing saves until you confirm.</li>
         </ol>
@@ -3699,9 +3710,9 @@ function _adjUploadModalHTML() {
 
 function _downloadAdjTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([
-    ['SKU','Adjustment','Reason'],
-    ['BNDBCR17', 25, 'Month-end physical recount'],
-    ['PCKCRR38', -10, 'Damaged in storage'],
+    ['SKU','Description','Adjustment','Reason'],
+    ['BNDBCR17', 'PP Sheet 0.4mm A5 diary separator green', 25, 'Month-end physical recount'],
+    ['PCKCRR38', '(description is for your reference only — matching is by SKU)', -10, 'Damaged in storage'],
   ]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Stock Adjustments');
@@ -3749,7 +3760,12 @@ function _parseAdjUpload(file) {
       if (seen.has(sku)) { errors.push(`Row ${rowNum} (${sku}): duplicate SKU in this file — combine into one row`); return; }
       seen.add(sku);
       const item = skuMap[sku];
-      if (!item) { errors.push(`Row ${rowNum} (${sku}): SKU not found in the database`); return; }
+      if (!item) {
+        const _u = window._USER || {};
+        const _scoped = (_u.role === 'region' || _u.role === 'region_inventory') && _u.region;
+        errors.push(`Row ${rowNum} (${sku}): SKU not found${_scoped ? ` in your region (${_u.region}) or` : ''} in the database`);
+        return;
+      }
 
       const rawAdj = String(row[headerMap.adj]).trim().replace(/,/g,'');
       const amount = parseFloat(rawAdj);
