@@ -3670,6 +3670,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target && e.target.id === 'dl-template') _downloadTemplate();
     if (e.target && e.target.id === 'upload-confirm') _saveUpload();
   });
+  // (restored) file picker for the materials Bulk Upload — was accidentally removed in v5
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'upload-file' && e.target.files.length) {
+      document.getElementById('upload-filename').textContent = e.target.files[0].name;
+      _parseUpload(e.target.files[0]);
+    }
+  });
 });
 
 
