@@ -63,7 +63,7 @@
 </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, query, where, runTransaction, writeBatch }
+  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -82,7 +82,7 @@
   const _auth = getAuth(_app);
   // expose a tiny compat-like wrapper so the rest of the (compat-style) code works unchanged
   window._FS = _fs;
-  window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, query, where, runTransaction, writeBatch };
+  window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch };
   window._authApi = { auth: _auth, signInWithEmailAndPassword, signOut, onAuthStateChanged };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
@@ -1299,6 +1299,7 @@ function rowHTML(r,idx){
     <div style="margin-top:12px;display:flex;gap:8px">
       <button class="adjust-btn" onclick="openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Adjust Stock</button>
       <button class="edit-item-btn" onclick="openEditModal('${r.sku}')" style="background:var(--orange);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Edit Item</button>
+      ${(window._USER||{}).role==='admin' ? `<button class="delete-item-btn" onclick="deleteSkuFlow('${r.sku}')" style="background:var(--red);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;margin-left:auto">🗑 Delete SKU</button>` : ''}
     </div></div>
     <div class="detail-section"><h5>Stock Parameters</h5>
     <dl class="detail-grid">
@@ -3391,10 +3392,6 @@ const UPLOAD_MAP = {
   "CHN Lead Time":                { c:"materials", f:"chn_lead_time", num:true },
   "Supplier MOQ":                 { c:"materials", f:"supplier_moq", num:true },
   "Unit Price":                   { c:"materials", f:"unit_price", num:true },
-  "Consumption Per Month":        { c:"vm_classification", f:"consumption_per_month", num:true },
-  "Order Frequency":              { c:"vm_classification", f:"ord_freq", num:true },
-  "Min Qty":                      { c:"vm_classification", f:"min_qty", num:true },
-  "Max Qty":                      { c:"vm_classification", f:"max_qty", num:true },
   "BLR Vendor 2":                 { c:"materials", f:"blr_v2" },
   "NCR Vendor 2":                 { c:"materials", f:"ncr_v2" },
   "CHN Vendor 2":                 { c:"materials", f:"chn_v2" },
@@ -3439,7 +3436,7 @@ function _uploadModalHTML() {
 }
 
 function _downloadTemplate() {
-  const sample = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,15,30,5,19,"","","",1000,10,"RL-2024","PRDSKU01",25,"2024-04-01","2024-12-31"];
+  const sample = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,"","","",1000,10,"RL-2024","PRDSKU01",25,"2024-04-01","2024-12-31"];
   const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, sample]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Materials Upload");
@@ -3681,7 +3678,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 /* ══════════════════════════════════════════════════════════════
-   BULK ADJUSTMENT UPLOAD  — 3-column file: SKU / Adjustment(±) / Reason
+   DELETE SKU (admin only) — type DELETE to confirm, like delete_items.py.
+   Removes the SKU's docs from: materials, vm_classification,
+   consumption_2025, live_stock. The stock_adjustments audit log is
+   KEPT on purpose (audit trail should survive item deletion).
+   ══════════════════════════════════════════════════════════════ */
+async function deleteSkuFlow(sku){
+  if ((window._USER||{}).role !== 'admin') { alert('Deleting items is admin-only.'); return; }
+  const item = DATA.find(r => r.sku === sku);
+  const desc = item && item.description ? `\n${item.description}` : '';
+  const typed = prompt(`⚠ You are about to PERMANENTLY delete:\n\nSKU: ${sku}${desc}\n\nThis removes it from materials, VM classification, consumption and live stock. This cannot be undone.\n\nType DELETE (in capitals) to confirm:`);
+  if (typed === null) return;                       // cancelled
+  if (typed.trim() !== 'DELETE') { alert('Not deleted — you must type DELETE exactly.'); return; }
+  try {
+    const { doc, deleteDoc } = window._fsApi;
+    const colls = ['materials','vm_classification','consumption_2025','live_stock'];
+    await Promise.all(colls.map(c => deleteDoc(doc(window._FS, c, sku)).catch(e => {
+      // missing doc in a collection is fine; rethrow real errors
+      if (!/not.?found/i.test(e.message||'')) throw e;
+    })));
+    // update local state + UI
+    DATA = DATA.filter(r => r.sku !== sku);
+    renderTable();
+    try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+    // email notification (same channel as edits)
+    try { notifyProcurement('Item Deleted', `SKU ${sku} was deleted by ${(window._USER||{}).email||'admin'}${desc ? ' — ' + (item.description||'') : ''}`); } catch(e){}
+    alert(`✓ ${sku} deleted.`);
+  } catch(err){
+    alert('Delete failed: ' + (err.message||err));
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   BULK ADJUSTMENT UPLOAD — SKU / Description (ref) / Adjustment(±) / Reason
    - Adjustment is a DELTA (+50 adds, -20 subtracts) — same as the single Adjust flow.
    - Each valid row runs through applyAdjustment() → live_stock update + stock_adjustments audit entry.
    - Gated by the 'bulk_adjust' permission (⚙ Permissions → "Bulk adjustment upload").
