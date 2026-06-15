@@ -3392,6 +3392,10 @@ const UPLOAD_MAP = {
   "CHN Lead Time":                { c:"materials", f:"chn_lead_time", num:true },
   "Supplier MOQ":                 { c:"materials", f:"supplier_moq", num:true },
   "Unit Price":                   { c:"materials", f:"unit_price", num:true },
+  "Consumption Per Month":        { c:"vm_classification", f:"consumption_per_month", num:true },
+  "Buffer Lead Time":             { c:"vm_classification", f:"buffer_lead_time", num:true },
+  "Order Frequency":              { c:"vm_classification", f:"ord_freq", num:true },
+  "Helper":                       { c:"vm_classification", f:"helper" },
   "BLR Vendor 2":                 { c:"materials", f:"blr_v2" },
   "NCR Vendor 2":                 { c:"materials", f:"ncr_v2" },
   "CHN Vendor 2":                 { c:"materials", f:"chn_v2" },
@@ -3419,7 +3423,7 @@ function _uploadModalHTML() {
       <div style="padding:22px" id="upload-body">
         <ol style="font-size:13px;color:var(--text-2);line-height:1.7;margin:0 0 16px 18px;padding:0">
           <li>Download the template and fill one row per material (SKU is required).</li>
-          <li>Existing SKU = update. New SKUs are flagged — they'll have no consumption/VM data (Min/Max blank) until a rebuild, so add new items via rebuild.</li>
+          <li>Existing SKU = update. New SKUs need Consumption Per Month, Buffer Lead Time, Order Frequency and Helper filled for Min/Max to compute. A later rebuild reconciles against the master sheet.</li>
           <li>Upload the file — you'll see a preview before anything is saved.</li>
         </ol>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px">
@@ -3436,7 +3440,7 @@ function _uploadModalHTML() {
 }
 
 function _downloadTemplate() {
-  const sample = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,"","","",1000,10,"RL-2024","PRDSKU01",25,"2024-04-01","2024-12-31"];
+  const sample = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,15,5,30,"High-HV-15","","","",1000,10,"RL-2024","PRDSKU01",25,"2024-04-01","2024-12-31"];
   const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, sample]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Materials Upload");
@@ -3480,7 +3484,12 @@ function _parseUpload(file) {
       }
       const isNew = !existingSkus.has(sku);
       if (isNew) {
-        warnings.push(`Row ${rowNum} (${sku}): NEW SKU — will be added with NO consumption/VM data, so Min/Max stay "—" until a database rebuild. Add via rebuild instead unless you're sure.`);
+        const consVal = String(row['Consumption Per Month']||'').trim();
+        if (!consVal) {
+          warnings.push(`Row ${rowNum} (${sku}): NEW SKU with no Consumption Per Month — Min/Max will stay "—". Fill Consumption, Buffer Lead Time, Order Frequency and Helper for the formula to compute.`);
+        } else {
+          warnings.push(`Row ${rowNum} (${sku}): NEW SKU — make sure Buffer Lead Time, Order Frequency and Helper are filled too, or Min/Max may be wrong. A later rebuild will reconcile against the master sheet.`);
+        }
       }
       const today = new Date().toISOString().slice(0,10);
       let launchStartVal = String(row['Launch Start Date']||'').trim();
