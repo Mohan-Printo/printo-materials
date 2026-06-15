@@ -875,7 +875,6 @@
         <option value="commercial">Commercial</option>
         <option value="inventory">Inventory</option>
         <option value="region">Region users (all regions)</option>
-        <option value="CHN-Inventory Team">CHN</option>
         <option value="region_inventory">Region Inventory (per-region inventory teams)</option>
       </select>
       <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px">Editable fields <span id="perms-count" style="color:#9CA3AF;font-weight:400"></span></div>
@@ -3420,7 +3419,7 @@ function _uploadModalHTML() {
       <div style="padding:22px" id="upload-body">
         <ol style="font-size:13px;color:var(--text-2);line-height:1.7;margin:0 0 16px 18px;padding:0">
           <li>Download the template and fill one row per material (SKU is required).</li>
-          <li>Existing SKU = update · New SKU = added.</li>
+          <li>Existing SKU = update. New SKUs are flagged — they'll have no consumption/VM data (Min/Max blank) until a rebuild, so add new items via rebuild.</li>
           <li>Upload the file — you'll see a preview before anything is saved.</li>
         </ol>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px">
@@ -3480,6 +3479,9 @@ function _parseUpload(file) {
         errors.push(`Row ${rowNum} (${sku}): Criticality "${crit}" invalid — use V.High/High/Med/Low`);
       }
       const isNew = !existingSkus.has(sku);
+      if (isNew) {
+        warnings.push(`Row ${rowNum} (${sku}): NEW SKU — will be added with NO consumption/VM data, so Min/Max stay "—" until a database rebuild. Add via rebuild instead unless you're sure.`);
+      }
       const today = new Date().toISOString().slice(0,10);
       let launchStartVal = String(row['Launch Start Date']||'').trim();
       const launchEndVal = String(row['Launch End Date']||'').trim();
@@ -3532,7 +3534,7 @@ function _renderUploadPreview(total, updates, news, errors, warnings) {
       <div style="display:flex;gap:10px;margin-bottom:14px">
         <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">TOTAL ROWS</div><div style="font-size:22px;font-weight:700;color:var(--navy)">${total}</div></div>
         <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">WILL UPDATE</div><div style="font-size:22px;font-weight:700;color:var(--orange)">${updates}</div></div>
-        <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">NEW ITEMS</div><div style="font-size:22px;font-weight:700;color:var(--green)">${news}</div></div>
+        <div style="flex:1;background:${news?'#FFF4E0':'var(--surface)'};border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">NEW (no VM data)</div><div style="font-size:22px;font-weight:700;color:${news?'#854F0B':'var(--text-4)'}">${news}</div></div>
         <div style="flex:1;background:${errors.length?'var(--red-soft)':'var(--surface)'};border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">ERRORS</div><div style="font-size:22px;font-weight:700;color:${errors.length?'var(--red)':'var(--text-4)'}">${errors.length}</div></div>
       </div>
       ${errors.length?`<div style="background:var(--red-soft);color:var(--red);padding:10px 12px;border-radius:6px;font-size:12px;max-height:140px;overflow:auto;margin-bottom:10px">${errors.slice(0,50).map(e=>`<div>${e}</div>`).join('')}${errors.length>50?`<div>…and ${errors.length-50} more</div>`:''}</div>`:''}
