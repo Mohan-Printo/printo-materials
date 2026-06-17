@@ -1326,7 +1326,7 @@ function rowHTML(r,idx){
       <div class="detail-item"><dt>Season</dt><dd>${r.season||"—"}</dd></div>
       <div class="detail-item"><dt>Seasonal Consumption</dt><dd>${r.seasonal_consumption!=null?fmtNum(r.seasonal_consumption):"—"}</dd></div>
       <div class="detail-item"><dt>Launch Start Date</dt><dd>${r.launch_start||"—"}</dd></div>
-      <div class="detail-item"><dt>Launch End Date</dt><dd>${r.launch_end||"—"}</dd></div>
+      <div class="detail-item"><dt>Season End Date</dt><dd>${r.launch_end||"—"}</dd></div>
       <div class="detail-item"><dt>Ratelist Name</dt><dd>${r.ratelist_name||"—"}</dd></div>
       <div class="detail-item"><dt>Product SKU</dt><dd>${r.product_sku||"—"}</dd></div>
       <div class="detail-item"><dt>Distrbn MOQ</dt><dd>${r.min_distrbn_qty!=null?fmtNum(r.min_distrbn_qty):"—"}</dd></div>
@@ -1917,7 +1917,7 @@ const FIELD_CATALOG = [
   { key:'season', label:'Season' },
   { key:'seasonal_consumption', label:'Seasonal Consumption' },
   { key:'launch_start', label:'Launch Start Date' },
-  { key:'launch_end', label:'Launch End Date' },
+  { key:'launch_end', label:'Season End Date' },
   { key:'ratelist_name', label:'Ratelist Name' },
   { key:'product_sku', label:'Product SKU' },
   { key:'blr_vendor', label:'BLR Vendor' },
@@ -2722,7 +2722,7 @@ function openEditModal(sku) {
     ${_ef('Season','ed-season',r.season, '', P('season'))}
     ${_ef('Seasonal Consumption','ed-seasoncons',r.seasonal_consumption, '', P('seasonal_consumption'))}
     ${_efDate('Launch Start Date','ed-launch-start',r.launch_start, '', P('launch_start'))}
-    ${_efDate('Launch End Date','ed-launch-end',r.launch_end, '', P('launch_end'))}
+    ${_efDate('Season End Date','ed-launch-end',r.launch_end, '', P('launch_end'))}
     ${_ef('Ratelist Name','ed-ratelist',r.ratelist_name, '', P('ratelist_name'))}
     ${_ef('Product SKU','ed-productsku',r.product_sku, '', P('product_sku'))}
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Vendors${(_u.role==='region'||_u.role==='region_inventory')?' — '+_u.region:''}</div>
@@ -3589,7 +3589,7 @@ const UPLOAD_MAP = {
   "Product SKU":                  { c:"materials", f:"product_sku" },
   "Seasonal Consumption":         { c:"vm_classification", f:"seasonal_consumption", num:true },
   "Launch Start Date":            { c:"materials", f:"launch_start" },
-  "Launch End Date":              { c:"materials", f:"launch_end" },
+  "Season End Date":              { c:"materials", f:"launch_end" },
 };
 const TEMPLATE_HEADERS = Object.keys(UPLOAD_MAP);
 // Procurement gets a slimmed template (convenience only — fewer fields to fill).
@@ -3705,7 +3705,7 @@ function _parseUpload(file) {
       }
       const today = new Date().toISOString().slice(0,10);
       let launchStartVal = String(row['Launch Start Date']||'').trim();
-      const launchEndVal = String(row['Launch End Date']||'').trim();
+      const launchEndVal = String(row['Season End Date']||'').trim();
       // Launch Start: if blank, auto-fill today + warn
       if (!launchStartVal) {
         launchStartVal = today;
@@ -3714,7 +3714,7 @@ function _parseUpload(file) {
       }
       // Launch End: if blank, warn but allow (editable later in UI)
       if (!launchEndVal) {
-        warnings.push(`Row ${rowNum} (${sku}): Launch End Date is blank — add it later in the tool`);
+        warnings.push(`Row ${rowNum} (${sku}): Season End Date is blank — add it later in the tool`);
       }
       // Build per-collection field objects
       const matDoc = {}, vmDoc = {};
