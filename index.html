@@ -20,16 +20,16 @@
        {{user_name}} {{change_type}} {{change_time}} {{change_details}}
      Set the template's "To Email" to your procurement address(es).
   ========================================================================= */
-  const EMAILJS_PUBLIC_KEY = "8JNNlttKtlddf5N3v";
-  const EMAILJS_SERVICE_ID = "service_ullop1u";
-  const EMAILJS_TEMPLATE_ID = "template_m7neflh";
+  const EMAILJS_PUBLIC_KEY = "PASTE_PUBLIC_KEY_HERE";
+  const EMAILJS_SERVICE_ID = "PASTE_SERVICE_ID_HERE";
+  const EMAILJS_TEMPLATE_ID = "PASTE_TEMPLATE_ID_HERE";
   const EMAIL_NOTIFY_ENABLED = true;  // set false to turn off emails
   // Fixed recipient list for notifications. Add/remove emails here.
   // NOTE: your EmailJS template must use {{to_email}} in its "To Email" field
   // for this list to take effect (otherwise it uses the template's fixed To).
   const NOTIFY_EMAILS = [
-    "mohan.w@printo.in",
-    "karunya.s@printo.in",
+    // "person1@printo.in",
+    // "person2@printo.in",
   ];
 
   let _emailReady = false;
@@ -90,7 +90,7 @@
 </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch }
+  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch, deleteField }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -109,7 +109,7 @@
   const _auth = getAuth(_app);
   // expose a tiny compat-like wrapper so the rest of the (compat-style) code works unchanged
   window._FS = _fs;
-  window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch };
+  window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch, deleteField };
   window._authApi = { auth: _auth, signInWithEmailAndPassword, signOut, onAuthStateChanged };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
@@ -904,12 +904,18 @@
         <option value="region">Region users (all regions)</option>
         <option value="region_inventory">Region Inventory (per-region inventory teams)</option>
       </select>
+      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Specific user (optional)</label>
+      <select id="perms-user" style="width:100%;padding:10px;border:1px solid #C4CAD4;border-radius:8px;font-size:14px;margin-bottom:6px">
+        <option value="">All users with this role (role default)</option>
+      </select>
+      <div id="perms-user-hint" style="font-size:11px;color:#9CA3AF;margin-bottom:18px">Pick an email to give that person access different from the role default. Leave on "role default" to set the baseline for everyone with this role.</div>
       <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px">Editable fields <span id="perms-count" style="color:#9CA3AF;font-weight:400"></span></div>
       <div id="perms-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;max-height:340px;overflow:auto;padding:4px 2px"></div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:16px">
         <button id="perms-save" style="background:#1B3560;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-weight:600;cursor:pointer">Save</button>
         <button id="perms-selectall" style="background:#f1f2f4;color:#374151;border:none;padding:10px 16px;border-radius:8px;font-weight:500;cursor:pointer">Select all</button>
         <button id="perms-clearall" style="background:#f1f2f4;color:#374151;border:none;padding:10px 16px;border-radius:8px;font-weight:500;cursor:pointer">Clear all</button>
+        <button id="perms-remove-override" style="display:none;background:#FEE2E2;color:#B91C1C;border:none;padding:10px 16px;border-radius:8px;font-weight:500;cursor:pointer">Remove override</button>
         <span id="perms-msg" style="font-size:13px;margin-left:6px"></span>
       </div>
       <div style="font-size:11px;color:#9CA3AF;margin-top:12px">Note: Region users always keep edit access to their own region's vendor block, regardless of these toggles. Stock adjust + bulk toggles apply per role. Region Inventory users see only their own region's items. Changes apply when each user next loads the tool.</div>
@@ -993,8 +999,9 @@
       <div class="page-actions">
         <span id="cache-status" style="font-size:11px;color:var(--text-3);align-self:center;margin-right:4px"></span>
         <button class="btn" id="activity-bell-btn" title="Recent activity" style="position:relative">🔔<span id="activity-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center"></span></button>
+        <button class="btn admin-only" id="approvals-btn" title="Review pending stock adjustments" style="position:relative;display:none">✅ Approvals<span id="approvals-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#B45309;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center"></span></button>
         <button class="btn" id="refresh-data-btn" title="Reload latest data from the database">🔄 Refresh data</button>
-        <button class="btn">⬇ Export CSV</button>
+        <button class="btn" id="export-csv-btn">⬇ Export CSV</button>
         <button class="btn admin-only" id="bulk-upload-btn" title="Upload many materials from the Excel template">⬆ Bulk Upload</button>
         <button class="btn" id="bulk-adjust-btn" title="Upload many stock adjustments at once (SKU / ± amount / reason)" style="display:none">📦 Bulk Adjust</button>
         <button class="btn admin-only" id="perms-btn" title="Manage who can edit which fields">⚙ Permissions</button>
@@ -1427,7 +1434,7 @@ function syncTabs(){
   if(state.major||state.category)document.querySelector('[data-menu="categories"]').classList.add("active");
   else if(state.region)document.querySelector('[data-menu="regions"]').classList.add("active");
   else if(state.criticality)document.querySelector('[data-menu="criticality"]').classList.add("active");
-  else if(state.status)document.querySelector('[data-menu="status"]').classList.add("active");
+  else if(state.status&&state.status!=="Active")document.querySelector('[data-menu="status"]').classList.add("active");
   else document.querySelector('[data-tab="all"]').classList.add("active");
 }
 
@@ -1528,7 +1535,7 @@ function bucketize(rows,dim){
   if(dim==="status"){buckets["Active"]=rows.filter(d=>!isDiscontinued(d));buckets["Discontinued"]=rows.filter(d=>isDiscontinued(d));return buckets}
   if(dim==="vendor"){rows.forEach(r=>{const v=r.regions?.BLR?.vendor;if(v&&v!=="CS"){if(!buckets[v])buckets[v]=[];buckets[v].push(r)}});return buckets}
   if(dim==="reorder_type"){rows.forEach(r=>{const v=r.regions?.BLR?.str_reorder||"Unspecified";if(!buckets[v])buckets[v]=[];buckets[v].push(r)});return buckets}
-  if(dim==="sku_top10")return rows.slice(0,10).reduce((acc,r)=>{acc[r.sku]=[r];return acc},{});
+  if(dim==="sku_top10")return rows.reduce((acc,r)=>{acc[r.sku]=[r];return acc},{});
   rows.forEach(r=>{const k=r[dim]||"—";if(!buckets[k])buckets[k]=[];buckets[k].push(r)});
   return buckets;
 }
@@ -1620,20 +1627,62 @@ function handleChartConfig(pillEl){
 // (next calendar day) or the user clicks "Refresh data".
 const CACHE_KEY = 'printo_mat_cache_v1';
 function _todayStr(){ return new Date().toISOString().slice(0,10); }
-function _loadCache(){
+
+// ── IndexedDB key-value store (localStorage's ~5MB cap can't hold the dataset;
+//    materials alone is ~4MB, so localStorage.setItem threw QuotaExceededError and
+//    the cache silently never saved → every login re-downloaded everything.
+//    IndexedDB handles hundreds of MB, so repeat logins now load from cache.) ──
+const _IDB_NAME = 'printo_mat_db', _IDB_STORE = 'cache';
+function _idbOpen(){
+  return new Promise((resolve, reject) => {
+    try {
+      const req = indexedDB.open(_IDB_NAME, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(_IDB_STORE); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    } catch(e){ reject(e); }
+  });
+}
+function _idbGet(key){
+  return _idbOpen().then(db => new Promise((resolve, reject) => {
+    const r = db.transaction(_IDB_STORE,'readonly').objectStore(_IDB_STORE).get(key);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror   = () => reject(r.error);
+  }));
+}
+function _idbSet(key, val){
+  return _idbOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(_IDB_STORE,'readwrite');
+    tx.objectStore(_IDB_STORE).put(val, key);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror    = () => reject(tx.error);
+  }));
+}
+function _idbDel(key){
+  return _idbOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(_IDB_STORE,'readwrite');
+    tx.objectStore(_IDB_STORE).delete(key);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror    = () => reject(tx.error);
+  }));
+}
+
+async function _loadCache(){
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const obj = JSON.parse(raw);
+    const obj = await _idbGet(CACHE_KEY);
+    if (!obj) return null;
     if (obj.date !== _todayStr()) return null;   // expired (new day)
     return obj;
   } catch(e){ return null; }
 }
-function _saveCache(payload){
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(Object.assign({date:_todayStr()}, payload))); }
+async function _saveCache(payload){
+  try { await _idbSet(CACHE_KEY, Object.assign({date:_todayStr()}, payload)); }
   catch(e){ console.warn('cache save failed (data still works this session):', e.message); }
 }
-function _clearCache(){ try{ localStorage.removeItem(CACHE_KEY); }catch(e){} }
+async function _clearCache(){
+  try { await _idbDel(CACHE_KEY); } catch(e){}
+  try { localStorage.removeItem(CACHE_KEY); } catch(e){}   // also drop any legacy localStorage cache
+}
 
 async function _fetchAll(collectionName) {
   const { collection, getDocs } = window._fsApi;
@@ -1760,7 +1809,7 @@ function _wireLogin(){
 async function _doLogout(){
   try { await window._authApi.signOut(window._authApi.auth); } catch(e){}
   // hard reload to clear all in-memory data (so no region data lingers)
-  try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+  try { await _clearCache(); } catch(e){}
   location.reload();
 }
 
@@ -1839,7 +1888,7 @@ function _canEditAnything(){
   if (r === 'admin' || r === 'region') return true;
   if (r === 'procurement') return true;
   if (r === 'commercial' || r === 'inventory' || r === 'region_inventory'){
-    const s = TEAM_EDITABLE_FIELDS[r];
+    const s = _effectiveAllowFor(window._USER||{});
     return !!(s && s.size > 0);   // includes stock/bulk_adjust, so they won't be 'view-only'
   }
   return false;
@@ -1909,6 +1958,12 @@ let TEAM_EDITABLE_FIELDS = {
   region_inventory: new Set(DEFAULT_PERMISSIONS.region_inventory),
 };
 
+// Per-USER field overrides: email (lowercase) -> Set of field keys.
+// When an entry exists for the logged-in user, it REPLACES that user's role default,
+// so each email (e.g. blr@printo.in vs hyd@printo.in) can get different access.
+// Populated from the config/user_permissions doc at boot.
+let USER_FIELD_OVERRIDES = {};
+
 // Load saved permissions from Firestore (config/permissions). Safe fallback to defaults.
 async function _loadPermissions(){
   try {
@@ -1923,9 +1978,26 @@ async function _loadPermissions(){
     } else {
       console.log('[PERMS] none saved — using defaults');
     }
+    // per-user overrides (email -> [field keys])
+    const usnap = await getDoc(doc(window._FS, 'config', 'user_permissions'));
+    if (usnap.exists()){
+      const ud = usnap.data() || {};
+      USER_FIELD_OVERRIDES = {};
+      Object.keys(ud).forEach(email => {
+        if (Array.isArray(ud[email])) USER_FIELD_OVERRIDES[String(email).toLowerCase()] = new Set(ud[email]);
+      });
+      console.log('[PERMS] per-user overrides loaded:', Object.keys(USER_FIELD_OVERRIDES).length);
+    }
   } catch(e){ console.warn('[PERMS] load failed, using defaults:', e.message); }
 }
 
+// Effective allow-set for a user: their per-email override if one exists, else the role default.
+function _effectiveAllowFor(u){
+  u = u || window._USER || {};
+  const email = String(u.email||'').toLowerCase();
+  if (email && USER_FIELD_OVERRIDES[email]) return USER_FIELD_OVERRIDES[email];
+  return TEAM_EDITABLE_FIELDS[u.role] || new Set();
+}
 // scope can be: a region code ('BLR'..), 'stock', OR a specific field key.
 function _canEditField(scope, fieldKey){
   const u = window._USER || {};
@@ -1934,7 +2006,7 @@ function _canEditField(scope, fieldKey){
 
   // Region users: their region's vendor block + stock (+ any field keys granted to 'region')
   if (role === 'region'){
-    const allow = TEAM_EDITABLE_FIELDS.region || new Set();
+    const allow = _effectiveAllowFor(u);
     if (scope === 'stock') return allow.has('stock');
     if (scope === u.region) return true;          // their region's vendor/lead block
     const key = fieldKey || scope;
@@ -1943,7 +2015,7 @@ function _canEditField(scope, fieldKey){
 
   // Team users + region_inventory: field-level allow-list
   if (role === 'procurement' || role === 'commercial' || role === 'inventory' || role === 'region_inventory'){
-    const allow = TEAM_EDITABLE_FIELDS[role] || new Set();
+    const allow = _effectiveAllowFor(u);
     if (scope === 'stock') return allow.has('stock');
     const key = fieldKey || scope;
     if (['BLR','CHN','HYD','PUN','NCR'].includes(scope)){
@@ -1958,14 +2030,14 @@ function _canEditField(scope, fieldKey){
 function _canBulkUpload(){
   const u = window._USER || {};
   if (u.role === 'admin') return true;
-  const allow = TEAM_EDITABLE_FIELDS[u.role] || new Set();
+  const allow = _effectiveAllowFor(u);
   return allow.has('bulk_upload');
 }
 // Bulk ADJUSTMENT upload: admin always; teams/region if granted 'bulk_adjust' in Permissions
 function _canBulkAdjust(){
   const u = window._USER || {};
   if (u.role === 'admin') return true;
-  const allow = TEAM_EDITABLE_FIELDS[u.role] || new Set();
+  const allow = _effectiveAllowFor(u);
   return allow.has('bulk_adjust');
 }
 function _isAdmin(){ return (window._USER||{}).role === 'admin'; }
@@ -2025,7 +2097,7 @@ function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'
 async function _bootApp() {
   try {
     let mats, vms, cons, live, ubuf;
-    const cached = _loadCache();
+    const cached = await _loadCache();
     if (cached) {
       // Loaded from today's cache — NO Firestore reads
       _prog(60, 'Loading from cache...');
@@ -2234,11 +2306,76 @@ async function _bootApp() {
    All writes isolated here for easy future migration.
    ══════════════════════════════════════════════════════════════ */
 
+/* ── Maker-checker router ──────────────────────────────────────
+   submitAdjustment() is the single entry point used by the UI.
+   - admin  → applies instantly (applyAdjustment)
+   - others → creates a PENDING record; live count does NOT move.
+   ────────────────────────────────────────────────────────────── */
+async function submitAdjustment(sku, amount, reason) {
+  amount = parseFloat(amount);
+  if (isNaN(amount)) throw new Error('Adjustment amount must be a number');
+  const u = window._USER || {};
+  if (u.role === 'admin') {
+    await applyAdjustment(sku, amount, reason);
+    return { applied: true };
+  }
+  // everyone else: write a pending request, do not touch live_stock
+  const { collection, addDoc } = window._fsApi;
+  const row = DATA.find(r => r.sku === sku);
+  await addDoc(collection(window._FS, 'stock_adjustments'), {
+    sku: sku,
+    amount: amount,
+    reason: reason || '',
+    status: 'pending',
+    maker: u.email || 'unknown',
+    maker_region: u.region || null,
+    desc: (row && row.description) || '',
+    at: new Date().toISOString()
+  });
+  // reflect pending state locally so the badge shows immediately
+  if (row) { row._pending = (row._pending || 0) + 1; }
+  try { _logActivity('Adjustment Pending', `${sku}: ${amount>0?'+':''}${amount} — awaiting approval (${reason||'no reason'})`); } catch(e){}
+  return { applied: false, pending: true };
+}
+
+/* Approve a pending adjustment: apply it, then mark the record approved. */
+async function approvePending(record) {
+  const { doc, setDoc } = window._fsApi;
+  await applyAdjustment(record.sku, record.amount, record.reason, true);  // true = skip log; the approved record IS the log
+  await setDoc(doc(window._FS, 'stock_adjustments', record._id), {
+    status: 'approved',
+    approver: (window._USER||{}).email || 'admin',
+    decided_at: new Date().toISOString()
+  }, { merge: true });
+  try { notifyProcurement('Adjustment Approved', `${record.sku}: ${record.amount>0?'+':''}${record.amount} approved (maker ${record.maker})`); } catch(e){}
+}
+
+/* Reject a pending adjustment: nothing applies, record marked rejected. */
+async function rejectPending(record) {
+  const { doc, setDoc } = window._fsApi;
+  await setDoc(doc(window._FS, 'stock_adjustments', record._id), {
+    status: 'rejected',
+    approver: (window._USER||{}).email || 'admin',
+    decided_at: new Date().toISOString()
+  }, { merge: true });
+  try { notifyProcurement('Adjustment Rejected', `${record.sku}: ${record.amount>0?'+':''}${record.amount} rejected (maker ${record.maker})`); } catch(e){}
+}
+
+/* Count pending adjustments (admin badge). Region approvers would scope here later. */
+async function loadPendingAdjustments() {
+  const { collection, getDocs } = window._fsApi;
+  const snap = await getDocs(collection(window._FS, 'stock_adjustments'));
+  const pend = [];
+  snap.forEach(d => { const v = d.data(); if (v.status === 'pending') pend.push({ _id: d.id, ...v }); });
+  pend.sort((a,b) => (a.at||'').localeCompare(b.at||''));
+  return pend;
+}
+
 /* Apply a stock adjustment:
    - updates live_stock/{sku}: adjustment (running), adjusted_count
    - appends to stock_adjustments log: {sku, amount, reason, at}
    closing_stock is NEVER modified here. */
-async function applyAdjustment(sku, amount, reason) {
+async function applyAdjustment(sku, amount, reason, _skipLog) {
   amount = parseFloat(amount);
   if (isNaN(amount)) throw new Error('Adjustment amount must be a number');
 
@@ -2259,13 +2396,15 @@ async function applyAdjustment(sku, amount, reason) {
     }, { merge: true });
   });
 
-  // audit log entry — the 3 columns: sku, amount, reason (+ timestamp)
-  await addDoc(collection(window._FS, 'stock_adjustments'), {
-    sku: sku,
-    amount: amount,
-    reason: reason || '',
-    at: new Date().toISOString()
-  });
+  // audit log entry — skipped when applying an already-logged approved request
+  if (!_skipLog) {
+    await addDoc(collection(window._FS, 'stock_adjustments'), {
+      sku: sku,
+      amount: amount,
+      reason: reason || '',
+      at: new Date().toISOString()
+    });
+  }
 
   // update local DATA so UI reflects immediately
   const row = DATA.find(r => r.sku === sku);
@@ -2445,12 +2584,19 @@ async function _loadAdjHistory(sku) {
   try {
     const hist = await getAdjustmentHistory(sku);
     if (!hist.length) { box.innerHTML = '<span style="color:var(--text-4)">No adjustments yet.</span>'; return; }
-    box.innerHTML = hist.map(h => `
-      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--surface-2)">
-        <span style="font-weight:600;color:${h.amount>=0?'var(--green)':'var(--red)'}">${h.amount>0?'+':''}${h.amount}</span>
+    box.innerHTML = hist.map(h => {
+      const tag = h.status === 'pending' ? '<span style="color:#B45309;font-size:10px;font-weight:700"> ⏳ PENDING</span>'
+                : h.status === 'rejected' ? '<span style="color:var(--red);font-size:10px;font-weight:700"> ✕ REJECTED</span>'
+                : h.status === 'approved' ? '<span style="color:var(--green);font-size:10px;font-weight:700"> ✓ APPROVED</span>'
+                : '';
+      const dim = (h.status === 'pending' || h.status === 'rejected') ? 'opacity:.6;' : '';
+      return `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--surface-2);${dim}">
+        <span style="font-weight:600;color:${h.amount>=0?'var(--green)':'var(--red)'}">${h.amount>0?'+':''}${h.amount}${tag}</span>
         <span style="flex:1;padding:0 10px;color:var(--text-2)">${h.reason||'—'}</span>
         <span style="color:var(--text-4);font-size:11px">${h.at?new Date(h.at).toLocaleString():''}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   } catch(e){ box.innerHTML = '<span style="color:var(--red)">Could not load history</span>'; }
 }
 
@@ -2462,10 +2608,12 @@ document.addEventListener('click', async (e) => {
     if (amt === '' || isNaN(parseFloat(amt))) { msg.style.color='var(--red)'; msg.textContent='Enter a number'; return; }
     msg.style.color='var(--text-3)'; msg.textContent='Saving…';
     try {
-      await applyAdjustment(_adjSku, amt, reason);
+      const res = await submitAdjustment(_adjSku, amt, reason);
       openAdjustModal(_adjSku);   // refresh figures + history
       renderTable();
-      document.getElementById('adj-msg').textContent='Saved ✓';
+      const m2 = document.getElementById('adj-msg');
+      if (res && res.pending) { m2.style.color='#B45309'; m2.textContent='Submitted ⏳ awaiting admin approval'; }
+      else { m2.style.color='var(--green)'; m2.textContent='Saved ✓'; }
     } catch(err){ msg.style.color='var(--red)'; msg.textContent='Error: '+err.message; }
   }
   if (e.target && e.target.id === 'adj-clear') {
@@ -2742,8 +2890,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 /* ── EXPORT CSV ─────────────────────────────── */
-document.querySelector('.btn').addEventListener('click', function(e){
-  if(this.textContent.includes('Export')){
+document.getElementById('export-csv-btn').addEventListener('click', function(e){
+  {
     const list = applyFilters();
     const hdrs = ['SKU','Description','Major Category','Category','UOM','Criticality','Classification','Type','Supplier MOQ','Unit Price','Closing Stock','Cons/Month','Cons Value','Status','Cities'];
     const rows = list.map(r => [
@@ -3245,8 +3393,8 @@ function _renderLowStockAlert(rows, regionKey){
   const alerts = [];
   rows.forEach(r=>{
     const stock = r.closing_stock;
-    const minQ = r._min_qty;
-    const maxQ = r._max_qty;
+    const minQ = r.min_qty;
+    const maxQ = r.max_qty;
     if(stock==null || minQ==null) return;
     if(stock < minQ){
       const severity = stock===0 ? 'critical' : (stock < minQ*0.5 ? 'warn' : 'low');
@@ -3444,6 +3592,24 @@ const UPLOAD_MAP = {
   "Launch End Date":              { c:"materials", f:"launch_end" },
 };
 const TEMPLATE_HEADERS = Object.keys(UPLOAD_MAP);
+// Procurement gets a slimmed template (convenience only — fewer fields to fill).
+// SKU is always required (rows match by SKU). Removed columns still write if re-added.
+const PROCUREMENT_TEMPLATE_HEADERS = [
+  "SKU",
+  "Classification",
+  "Type",
+  "Material Category Desc",
+  "UOM",
+  "Supplier MOQ",
+  "Season",
+  "Reorder Type",
+  "Seasonal Consumption",
+  "BLR (B / blank)",
+  "CHN (C / blank)",
+  "HYD (H / blank)",
+  "PUN (P / blank)",
+  "NCR (D / blank)",
+];
 const VALID_CRITICALITY = ["V.High","High","Med","Low"];
 
 let _uploadParsed = null;   // holds parsed+validated rows awaiting confirm
@@ -3476,8 +3642,18 @@ function _uploadModalHTML() {
 }
 
 function _downloadTemplate() {
-  const sample = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,15,5,30,"High-HV-15","","","",1000,10,"RL-2024","PRDSKU01",25,"2024-04-01","2024-12-31"];
-  const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, sample]);
+  // full-template sample values, keyed by header so a subset stays aligned
+  const fullHeaders = TEMPLATE_HEADERS;
+  const fullSample  = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,15,5,30,"High-HV-15","","","",1000,10,"RL-2024","PRDSKU01",25,"2024-04-01","2024-12-31"];
+  const sampleByHeader = {};
+  fullHeaders.forEach((h,i) => { sampleByHeader[h] = fullSample[i]; });
+
+  // procurement gets the slimmed header set; everyone else gets the full one
+  const role = (window._USER || {}).role;
+  const headers = (role === 'procurement') ? PROCUREMENT_TEMPLATE_HEADERS : fullHeaders;
+  const sample = headers.map(h => (h in sampleByHeader ? sampleByHeader[h] : ""));
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Materials Upload");
   XLSX.writeFile(wb, "material_upload_template.xlsx");
@@ -3619,7 +3795,7 @@ async function _saveUpload() {
     msg.style.color = 'var(--green)';
     msg.textContent = `Done — saved ${_uploadParsed.length} rows. Click Refresh data to see changes.`;
     // clear cache so next refresh shows new data
-    try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+    _clearCache();
 
     // Notify Procurement — one summary email for the whole batch
     try {
@@ -3647,9 +3823,42 @@ document.addEventListener('DOMContentLoaded', () => {
   document.body.insertAdjacentHTML('beforeend', _uploadModalHTML());
 
   // ===== Permissions manager wiring =====
+  // Load the users list once (for the per-email dropdown). Each entry needs an email:
+  // prefer an `email` field on the doc; else use the doc id if it looks like an email.
+  let _permsUsersCache = null;
+  async function _getPermsUsers(){
+    if (_permsUsersCache) return _permsUsersCache;
+    try {
+      const all = await _fetchAll('users');
+      _permsUsersCache = all.map(u => {
+        const email = String(u.email || (String(u._id).includes('@') ? u._id : '')).toLowerCase().trim();
+        return { email, role: String(u.role||'').toLowerCase().trim(), region: u.region || '' };
+      }).filter(u => u.email);
+    } catch(e){ console.warn('could not load users for permissions:', e.message); _permsUsersCache = []; }
+    return _permsUsersCache;
+  }
+  // Fill the email dropdown with users whose role matches the selected role.
+  async function _populatePermsUsers(){
+    const role = document.getElementById('perms-role').value;
+    const sel = document.getElementById('perms-user');
+    const prev = sel.value;
+    const users = await _getPermsUsers();
+    const matching = users.filter(u => u.role === role).sort((a,b)=>a.email.localeCompare(b.email));
+    sel.innerHTML = '<option value="">All users with this role (role default)</option>' +
+      matching.map(u => `<option value="${u.email}">${u.email}${u.region?(' — '+u.region):''}</option>`).join('');
+    sel.value = (prev && matching.some(u=>u.email===prev)) ? prev : '';
+    const hint = document.getElementById('perms-user-hint');
+    if (hint) hint.textContent = matching.length
+      ? 'Pick an email to give that person access different from the role default. Leave on "role default" to set the baseline for everyone with this role.'
+      : 'No users with this role found in the "users" collection (or their docs have no email field).';
+  }
   function _renderPermsFields(){
     const role = document.getElementById('perms-role').value;
-    const allow = TEAM_EDITABLE_FIELDS[role] || new Set();
+    const email = document.getElementById('perms-user').value;
+    // per-email override if one is selected & exists; otherwise the role default
+    const allow = email
+      ? (USER_FIELD_OVERRIDES[email] || TEAM_EDITABLE_FIELDS[role] || new Set())
+      : (TEAM_EDITABLE_FIELDS[role] || new Set());
     const wrap = document.getElementById('perms-fields');
     wrap.innerHTML = FIELD_CATALOG.map(f => {
       const checked = allow.has(f.key) ? 'checked' : '';
@@ -3658,21 +3867,29 @@ document.addEventListener('DOMContentLoaded', () => {
         <span>${f.label}</span>
       </label>`;
     }).join('');
+    const rm = document.getElementById('perms-remove-override');
+    if (rm) rm.style.display = (email && USER_FIELD_OVERRIDES[email]) ? '' : 'none';
     _updatePermsCount();
   }
   function _updatePermsCount(){
     const n = document.querySelectorAll('#perms-fields .perm-cb:checked').length;
-    document.getElementById('perms-count').textContent = `(${n} selected)`;
+    const email = document.getElementById('perms-user').value;
+    document.getElementById('perms-count').textContent = `(${n} selected · ${email ? 'for '+email : 'role default'})`;
   }
-  const permsBtn = document.getElementById('perms-btn');
-  if (permsBtn) permsBtn.addEventListener('click', () => {
+  async function _openPerms(){
     if (!_isAdmin()) { alert('Permissions are admin-only.'); return; }
     document.getElementById('perms-msg').textContent = '';
+    _permsUsersCache = null;            // re-read users each time the panel opens
+    await _populatePermsUsers();
     _renderPermsFields();
     document.getElementById('perms-modal').style.display = 'flex';
-  });
+  }
+  const permsBtn = document.getElementById('perms-btn');
+  if (permsBtn) permsBtn.addEventListener('click', _openPerms);
   const roleSel = document.getElementById('perms-role');
-  if (roleSel) roleSel.addEventListener('change', _renderPermsFields);
+  if (roleSel) roleSel.addEventListener('change', async () => { await _populatePermsUsers(); _renderPermsFields(); });
+  const userSel = document.getElementById('perms-user');
+  if (userSel) userSel.addEventListener('change', _renderPermsFields);
   document.addEventListener('change', (e) => {
     if (e.target && e.target.classList && e.target.classList.contains('perm-cb')) _updatePermsCount();
   });
@@ -3688,18 +3905,44 @@ document.addEventListener('DOMContentLoaded', () => {
   if (saveBtn) saveBtn.addEventListener('click', async () => {
     if (!_isAdmin()) return;
     const role = document.getElementById('perms-role').value;
+    const email = document.getElementById('perms-user').value;
     const selected = Array.from(document.querySelectorAll('#perms-fields .perm-cb:checked')).map(cb => cb.dataset.key);
     const msg = document.getElementById('perms-msg');
     msg.style.color = '#6B7280'; msg.textContent = 'Saving…';
     try {
-      // update in-memory immediately
-      TEAM_EDITABLE_FIELDS[role] = new Set(selected);
-      // persist the whole permissions doc (merge so other roles are untouched)
       const { doc, setDoc } = window._fsApi;
-      await setDoc(doc(window._FS, 'config', 'permissions'), { [role]: selected }, { merge: true });
-      msg.style.color = '#16a34a'; msg.textContent = '✓ Saved';
+      if (email){
+        // per-user override (overrides this person's role default)
+        USER_FIELD_OVERRIDES[email] = new Set(selected);
+        await setDoc(doc(window._FS, 'config', 'user_permissions'), { [email]: selected }, { merge: true });
+        msg.style.color = '#16a34a'; msg.textContent = '✓ Saved for ' + email;
+        const rm = document.getElementById('perms-remove-override'); if (rm) rm.style.display = '';
+      } else {
+        // role default (merge so other roles are untouched)
+        TEAM_EDITABLE_FIELDS[role] = new Set(selected);
+        await setDoc(doc(window._FS, 'config', 'permissions'), { [role]: selected }, { merge: true });
+        msg.style.color = '#16a34a'; msg.textContent = '✓ Saved (role default for ' + role + ')';
+      }
     } catch(err){
       msg.style.color = '#c0392b'; msg.textContent = 'Save failed: ' + (err.message||err);
+    }
+  });
+  const rmBtn = document.getElementById('perms-remove-override');
+  if (rmBtn) rmBtn.addEventListener('click', async () => {
+    if (!_isAdmin()) return;
+    const email = document.getElementById('perms-user').value;
+    if (!email) return;
+    const msg = document.getElementById('perms-msg');
+    msg.style.color = '#6B7280'; msg.textContent = 'Removing override…';
+    try {
+      const { doc, setDoc, deleteField } = window._fsApi;
+      delete USER_FIELD_OVERRIDES[email];
+      await setDoc(doc(window._FS, 'config', 'user_permissions'), { [email]: deleteField() }, { merge: true });
+      msg.style.color = '#16a34a'; msg.textContent = '✓ Override removed — ' + email + ' now uses the role default';
+      rmBtn.style.display = 'none';
+      _renderPermsFields();
+    } catch(err){
+      msg.style.color = '#c0392b'; msg.textContent = 'Remove failed: ' + (err.message||err);
     }
   });
 
@@ -3816,6 +4059,89 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════
+   APPROVALS QUEUE (admin) — review pending stock adjustments.
+   Maker-checker: non-admin adjustments wait here until Approve/Reject.
+   ══════════════════════════════════════════════════════════════ */
+function _approvalsPanelHTML(){
+  return `
+  <div id="approvals-panel" style="display:none;position:fixed;top:64px;right:20px;width:460px;max-height:74vh;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);z-index:2200">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg)">
+      <span style="font-weight:700;color:var(--navy)">Pending approvals</span>
+      <button id="approvals-refresh" style="border:none;background:none;color:var(--blue);font-size:12px;cursor:pointer">Refresh</button>
+    </div>
+    <div id="approvals-list" style="padding:6px 0"><div style="padding:16px;color:var(--text-3);font-size:13px">Loading…</div></div>
+  </div>`;
+}
+
+async function _renderApprovals(){
+  const list = document.getElementById('approvals-list');
+  const badge = document.getElementById('approvals-badge');
+  try {
+    const pend = await loadPendingAdjustments();
+    if (badge){ if (pend.length){ badge.style.display=''; badge.textContent = pend.length>9?'9+':String(pend.length); } else badge.style.display='none'; }
+    if (!pend.length){ list.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:13px">No pending adjustments.</div>'; return; }
+    list.innerHTML = pend.map(p => {
+      let when=''; try{ when=new Date(p.at).toLocaleString('en-IN'); }catch(e){ when=p.at||''; }
+      return `<div style="padding:12px 16px;border-bottom:1px solid var(--surface)" data-id="${p._id}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-family:monospace;font-size:13px;font-weight:600;color:var(--navy)">${p.sku}</span>
+          <span style="font-weight:700;color:${p.amount>=0?'var(--green)':'var(--red)'}">${p.amount>0?'+':''}${p.amount}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-2);margin:2px 0">${p.desc||''}</div>
+        <div style="font-size:11px;color:var(--text-4)">${p.reason||'(no reason)'} · ${p.maker||''}${p.maker_region?' ('+p.maker_region+')':''} · ${when}</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="ap-approve" data-id="${p._id}" style="background:var(--green,#1D9E75);color:#fff;border:none;padding:5px 14px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">Approve</button>
+          <button class="ap-reject" data-id="${p._id}" style="background:var(--red);color:#fff;border:none;padding:5px 14px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">Reject</button>
+        </div>
+      </div>`;
+    }).join('');
+    // stash records for handlers
+    window._pendingCache = {}; pend.forEach(p => window._pendingCache[p._id] = p);
+  } catch(e){
+    list.innerHTML = `<div style="padding:16px;color:var(--red);font-size:13px">Could not load: ${e.message}</div>`;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.body.insertAdjacentHTML('beforeend', _approvalsPanelHTML());
+  const btn = document.getElementById('approvals-btn');
+  const panel = document.getElementById('approvals-panel');
+
+  // show the button + load badge only for admin
+  const _initApprovals = () => {
+    if (!(window._USER && window._fsApi)) { setTimeout(_initApprovals, 800); return; }
+    if ((window._USER||{}).role === 'admin') {
+      if (btn) btn.style.display = '';
+      _renderApprovals();
+    }
+  };
+  setTimeout(_initApprovals, 1600);
+
+  if (btn) btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const showing = panel.style.display !== 'none';
+    panel.style.display = showing ? 'none' : 'block';
+    if (!showing) _renderApprovals();
+  });
+  document.addEventListener('click', async (e) => {
+    if (panel && panel.style.display!=='none' && !panel.contains(e.target) && e.target!==btn && !e.target.closest('#approvals-btn')) panel.style.display='none';
+    if (e.target && e.target.id === 'approvals-refresh') _renderApprovals();
+    if (e.target && e.target.classList && e.target.classList.contains('ap-approve')) {
+      const rec = (window._pendingCache||{})[e.target.dataset.id]; if (!rec) return;
+      e.target.disabled = true; e.target.textContent = '…';
+      try { await approvePending(rec); renderTable(); _renderApprovals(); }
+      catch(err){ alert('Approve failed: '+err.message); _renderApprovals(); }
+    }
+    if (e.target && e.target.classList && e.target.classList.contains('ap-reject')) {
+      const rec = (window._pendingCache||{})[e.target.dataset.id]; if (!rec) return;
+      e.target.disabled = true; e.target.textContent = '…';
+      try { await rejectPending(rec); _renderApprovals(); }
+      catch(err){ alert('Reject failed: '+err.message); _renderApprovals(); }
+    }
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════
    DELETE SKU (admin only) — type DELETE to confirm, like delete_items.py.
    Removes the SKU's docs from: materials, vm_classification,
    consumption_2025, live_stock. The stock_adjustments audit log is
@@ -3838,7 +4164,7 @@ async function deleteSkuFlow(sku){
     // update local state + UI
     DATA = DATA.filter(r => r.sku !== sku);
     renderTable();
-    try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+    _clearCache();
     // email notification (same channel as edits)
     try { notifyProcurement('Item Deleted', `SKU ${sku} was deleted by ${(window._USER||{}).email||'admin'}${desc ? ' — ' + (item.description||'') : ''}`); } catch(e){}
     alert(`✓ ${sku} deleted.`);
@@ -4017,7 +4343,7 @@ async function _saveAdjUpload() {
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK);
       await Promise.all(chunk.map(async (r) => {
-        try { await applyAdjustment(r.sku, r.amount, r.reason); }
+        try { await submitAdjustment(r.sku, r.amount, r.reason); }
         catch(e){ failed.push(`${r.sku}: ${e.message}`); }
       }));
       done = Math.min(i + CHUNK, rows.length);
@@ -4025,15 +4351,18 @@ async function _saveAdjUpload() {
     }
 
     renderTable();   // table reflects new adjusted counts immediately
-    try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+    _clearCache();
 
     if (failed.length) {
       msg.style.color = 'var(--red)';
       msg.textContent = `Done with ${failed.length} failure(s) — see console. ${rows.length - failed.length} applied.`;
       console.warn('Bulk adjustment failures:', failed);
     } else {
-      msg.style.color = 'var(--green)';
-      msg.textContent = `Done — ${rows.length} adjustments applied ✓`;
+      const isAdmin = (window._USER||{}).role === 'admin';
+      msg.style.color = isAdmin ? 'var(--green)' : '#B45309';
+      msg.textContent = isAdmin
+        ? `Done — ${rows.length} adjustments applied ✓`
+        : `Submitted — ${rows.length} adjustments ⏳ awaiting admin approval`;
     }
     _adjUploadRows = null;
 
@@ -4080,23 +4409,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ── MANUAL REFRESH (clears daily cache, re-reads Firestore once) ── */
 (function(){
-  function updateCacheStatus(){
+  async function updateCacheStatus(){
     try {
-      const raw = localStorage.getItem('printo_mat_cache_v1');
       const el = document.getElementById('cache-status');
       if (!el) return;
-      if (raw) {
-        const obj = JSON.parse(raw);
-        el.textContent = 'Data as of ' + (obj.date || 'today');
-      } else { el.textContent = ''; }
+      const obj = await _idbGet(CACHE_KEY);
+      el.textContent = obj ? ('Data as of ' + (obj.date || 'today')) : '';
     } catch(e){}
   }
   document.addEventListener('DOMContentLoaded', () => {
     updateCacheStatus();
     const btn = document.getElementById('refresh-data-btn');
-    if (btn) btn.addEventListener('click', () => {
+    if (btn) btn.addEventListener('click', async () => {
       if (confirm('Reload the latest data from the database? This uses database reads.')) {
-        try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+        try { await _clearCache(); } catch(e){}
         location.reload();
       }
     });
