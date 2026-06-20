@@ -24,6 +24,13 @@
   const EMAILJS_SERVICE_ID = "PASTE_SERVICE_ID_HERE";
   const EMAILJS_TEMPLATE_ID = "PASTE_TEMPLATE_ID_HERE";
   const EMAIL_NOTIFY_ENABLED = true;  // set false to turn off emails
+  // Fixed recipient list for notifications. Add/remove emails here.
+  // NOTE: your EmailJS template must use {{to_email}} in its "To Email" field
+  // for this list to take effect (otherwise it uses the template's fixed To).
+  const NOTIFY_EMAILS = [
+    // "person1@printo.in",
+    // "person2@printo.in",
+  ];
 
   let _emailReady = false;
   try {
@@ -46,24 +53,44 @@
 
   // Sends a notification email. changeType: "Bulk Upload" | "Item Edit" | "New Item"
   async function notifyProcurement(changeType, detailsText) {
+    // Always log to the in-app activity feed (independent of email)
+    try { _logActivity(changeType, detailsText); } catch(e){ console.warn('activity log failed:', e.message); }
+
     if (!EMAIL_NOTIFY_ENABLED) return;
     if (!_emailReady) { console.warn("Email not configured — skipping notification."); return; }
     try {
-      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      const params = {
         user_name: _getUserName(),
         change_type: changeType,
         change_time: new Date().toLocaleString("en-IN"),
         change_details: detailsText
-      });
-      console.log("Procurement notified:", changeType);
+      };
+      if (NOTIFY_EMAILS && NOTIFY_EMAILS.length) params.to_email = NOTIFY_EMAILS.join(',');
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, params);
+      console.log("Notified:", changeType);
     } catch(e) {
       console.warn("Email send failed:", e?.text || e?.message || e);
     }
   }
+
+  // Writes one entry to the 'activity' collection that powers the in-app bell.
+  async function _logActivity(type, details) {
+    try {
+      const { collection, addDoc } = window._fsApi || {};
+      if (!collection || !window._FS) return;
+      await addDoc(collection(window._FS, 'activity'), {
+        type: type,
+        details: (details || '').slice(0, 500),
+        user: (window._USER && window._USER.email) || _getUserName(),
+        at: new Date().toISOString()
+      });
+    } catch(e){ console.warn('could not write activity:', e.message); }
+  }
+  window._logActivity = _logActivity;
 </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, query, where, runTransaction, writeBatch }
+  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -82,7 +109,7 @@
   const _auth = getAuth(_app);
   // expose a tiny compat-like wrapper so the rest of the (compat-style) code works unchanged
   window._FS = _fs;
-  window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, query, where, runTransaction, writeBatch };
+  window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch };
   window._authApi = { auth: _auth, signInWithEmailAndPassword, signOut, onAuthStateChanged };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
@@ -810,6 +837,13 @@
 
 
   .detail-item dt span{display:inline-block;padding:1px 5px;background:var(--orange-soft);color:var(--orange-hover);border-radius:3px;margin-left:4px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
 </style>
 </head>
 <body>
@@ -965,6 +999,8 @@
       </div>
       <div class="page-actions">
         <span id="cache-status" style="font-size:11px;color:var(--text-3);align-self:center;margin-right:4px"></span>
+        <button class="btn" id="activity-bell-btn" title="Recent activity" style="position:relative">🔔<span id="activity-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center"></span></button>
+        <button class="btn admin-only" id="approvals-btn" title="Review pending stock adjustments" style="position:relative;display:none">✅ Approvals<span id="approvals-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#B45309;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center"></span></button>
         <button class="btn" id="refresh-data-btn" title="Reload latest data from the database">🔄 Refresh data</button>
         <button class="btn">⬇ Export CSV</button>
         <button class="btn admin-only" id="bulk-upload-btn" title="Upload many materials from the Excel template">⬆ Bulk Upload</button>
@@ -1291,6 +1327,8 @@ function rowHTML(r,idx){
       <div class="detail-item"><dt>Season</dt><dd>${r.season||"—"}</dd></div>
       <div class="detail-item"><dt>Seasonal Consumption</dt><dd>${r.seasonal_consumption!=null?fmtNum(r.seasonal_consumption):"—"}</dd></div>
       <div class="detail-item"><dt>Launch Start Date</dt><dd>${r.launch_start||"—"}</dd></div>
+      <div class="detail-item"><dt>New Launch</dt><dd>${r.new_launch||"—"}</dd></div>
+      <div class="detail-item"><dt>Season End Date</dt><dd>${r.season_end||"—"}</dd></div>
       <div class="detail-item"><dt>Launch End Date</dt><dd>${r.launch_end||"—"}</dd></div>
       <div class="detail-item"><dt>Ratelist Name</dt><dd>${r.ratelist_name||"—"}</dd></div>
       <div class="detail-item"><dt>Product SKU</dt><dd>${r.product_sku||"—"}</dd></div>
@@ -1299,6 +1337,7 @@ function rowHTML(r,idx){
     <div style="margin-top:12px;display:flex;gap:8px">
       <button class="adjust-btn" onclick="openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Adjust Stock</button>
       <button class="edit-item-btn" onclick="openEditModal('${r.sku}')" style="background:var(--orange);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Edit Item</button>
+      ${(window._USER||{}).role==='admin' ? `<button class="delete-item-btn" onclick="deleteSkuFlow('${r.sku}')" style="background:var(--red);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;margin-left:auto">🗑 Delete SKU</button>` : ''}
     </div></div>
     <div class="detail-section"><h5>Stock Parameters</h5>
     <dl class="detail-grid">
@@ -1787,12 +1826,12 @@ function _applyUserAccessUI(){
   const bulkAdjBtn = document.getElementById('bulk-adjust-btn');
   if (bulkAdjBtn) bulkAdjBtn.style.display = _canBulkAdjust() ? '' : 'none';
 
-  // Permissions + Add Material are STRICTLY admin-only. (Bug fix: the .admin-only CSS
-  // class only hid these for region users — team logins could still see them.)
-  ['perms-btn','add-material-btn'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = _isAdmin() ? '' : 'none';
-  });
+  // Permissions is STRICTLY admin-only.
+  const permsBtnEl = document.getElementById('perms-btn');
+  if (permsBtnEl) permsBtnEl.style.display = _isAdmin() ? '' : 'none';
+  // Add Material: admin always, plus any role granted 'add_material'.
+  const addMatEl = document.getElementById('add-material-btn');
+  if (addMatEl) addMatEl.style.display = _canAddMaterial() ? '' : 'none';
 
   // Region-scoped users (region + region_inventory) are locked to one region —
   // hide the Region filter menu/tab. Team users and admin keep all regions.
@@ -1850,6 +1889,7 @@ const FIELD_CATALOG = [
   { key:'stock', label:'⚙ Adjust stock quantity' },
   { key:'bulk_upload', label:'⚙ Bulk upload access' },
   { key:'bulk_adjust', label:'⚙ Bulk adjustment upload' },
+  { key:'add_material', label:'⚙ Add new material (+ Add Material button)' },
 ];
 const PERM_ROLES = ['procurement','commercial','inventory','region','region_inventory'];
 
@@ -1860,7 +1900,8 @@ const DEFAULT_PERMISSIONS = {
     'cat_mgr','unit_price','min_distrbn_qty',
     'supplier_moq','season','launch_start','launch_end','str_reorder_type',
     'seasonal_consumption','cities',
-    'blr_vendor','chn_vendor','hyd_vendor','ncr_vendor','pun_vendor'
+    'blr_vendor','chn_vendor','hyd_vendor','ncr_vendor','pun_vendor',
+    'add_material'
     // note: NO 'stock', NO 'bulk_upload' for procurement
   ],
   commercial: ['stock','bulk_upload'],   // can adjust stock + bulk upload
@@ -1940,6 +1981,12 @@ function _canBulkAdjust(){
   return allow.has('bulk_adjust');
 }
 function _isAdmin(){ return (window._USER||{}).role === 'admin'; }
+function _canAddMaterial(){
+  const u = window._USER || {};
+  if (u.role === 'admin') return true;
+  const allow = TEAM_EDITABLE_FIELDS[u.role] || new Set();
+  return allow.has('add_material');
+}
 // Does this user see all regions (admin + all team roles) or just one (region users)?
 function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region' && r!=='region_inventory'; }
 
@@ -2101,6 +2148,8 @@ async function _bootApp() {
         major_category: m.major_category || '',
         cat_manager: m.cat_mgr || '',
         season: m.season || '',
+        new_launch: m.new_launch || '',
+        season_end: m.season_end || '',
         launch_start: m.launch_start || m.launch_dt || '',
         launch_end: m.launch_end || '',
         ratelist_name: m.ratelist_name || '',
@@ -2205,11 +2254,76 @@ async function _bootApp() {
    All writes isolated here for easy future migration.
    ══════════════════════════════════════════════════════════════ */
 
+/* ── Maker-checker router ──────────────────────────────────────
+   submitAdjustment() is the single entry point used by the UI.
+   - admin  → applies instantly (applyAdjustment)
+   - others → creates a PENDING record; live count does NOT move.
+   ────────────────────────────────────────────────────────────── */
+async function submitAdjustment(sku, amount, reason) {
+  amount = parseFloat(amount);
+  if (isNaN(amount)) throw new Error('Adjustment amount must be a number');
+  const u = window._USER || {};
+  if (u.role === 'admin') {
+    await applyAdjustment(sku, amount, reason);
+    return { applied: true };
+  }
+  // everyone else: write a pending request, do not touch live_stock
+  const { collection, addDoc } = window._fsApi;
+  const row = DATA.find(r => r.sku === sku);
+  await addDoc(collection(window._FS, 'stock_adjustments'), {
+    sku: sku,
+    amount: amount,
+    reason: reason || '',
+    status: 'pending',
+    maker: u.email || 'unknown',
+    maker_region: u.region || null,
+    desc: (row && row.description) || '',
+    at: new Date().toISOString()
+  });
+  // reflect pending state locally so the badge shows immediately
+  if (row) { row._pending = (row._pending || 0) + 1; }
+  try { _logActivity('Adjustment Pending', `${sku}: ${amount>0?'+':''}${amount} — awaiting approval (${reason||'no reason'})`); } catch(e){}
+  return { applied: false, pending: true };
+}
+
+/* Approve a pending adjustment: apply it, then mark the record approved. */
+async function approvePending(record) {
+  const { doc, setDoc } = window._fsApi;
+  await applyAdjustment(record.sku, record.amount, record.reason, true);  // true = skip log; the approved record IS the log
+  await setDoc(doc(window._FS, 'stock_adjustments', record._id), {
+    status: 'approved',
+    approver: (window._USER||{}).email || 'admin',
+    decided_at: new Date().toISOString()
+  }, { merge: true });
+  try { notifyProcurement('Adjustment Approved', `${record.sku}: ${record.amount>0?'+':''}${record.amount} approved (maker ${record.maker})`); } catch(e){}
+}
+
+/* Reject a pending adjustment: nothing applies, record marked rejected. */
+async function rejectPending(record) {
+  const { doc, setDoc } = window._fsApi;
+  await setDoc(doc(window._FS, 'stock_adjustments', record._id), {
+    status: 'rejected',
+    approver: (window._USER||{}).email || 'admin',
+    decided_at: new Date().toISOString()
+  }, { merge: true });
+  try { notifyProcurement('Adjustment Rejected', `${record.sku}: ${record.amount>0?'+':''}${record.amount} rejected (maker ${record.maker})`); } catch(e){}
+}
+
+/* Count pending adjustments (admin badge). Region approvers would scope here later. */
+async function loadPendingAdjustments() {
+  const { collection, getDocs } = window._fsApi;
+  const snap = await getDocs(collection(window._FS, 'stock_adjustments'));
+  const pend = [];
+  snap.forEach(d => { const v = d.data(); if (v.status === 'pending') pend.push({ _id: d.id, ...v }); });
+  pend.sort((a,b) => (a.at||'').localeCompare(b.at||''));
+  return pend;
+}
+
 /* Apply a stock adjustment:
    - updates live_stock/{sku}: adjustment (running), adjusted_count
    - appends to stock_adjustments log: {sku, amount, reason, at}
    closing_stock is NEVER modified here. */
-async function applyAdjustment(sku, amount, reason) {
+async function applyAdjustment(sku, amount, reason, _skipLog) {
   amount = parseFloat(amount);
   if (isNaN(amount)) throw new Error('Adjustment amount must be a number');
 
@@ -2230,13 +2344,15 @@ async function applyAdjustment(sku, amount, reason) {
     }, { merge: true });
   });
 
-  // audit log entry — the 3 columns: sku, amount, reason (+ timestamp)
-  await addDoc(collection(window._FS, 'stock_adjustments'), {
-    sku: sku,
-    amount: amount,
-    reason: reason || '',
-    at: new Date().toISOString()
-  });
+  // audit log entry — skipped when applying an already-logged approved request
+  if (!_skipLog) {
+    await addDoc(collection(window._FS, 'stock_adjustments'), {
+      sku: sku,
+      amount: amount,
+      reason: reason || '',
+      at: new Date().toISOString()
+    });
+  }
 
   // update local DATA so UI reflects immediately
   const row = DATA.find(r => r.sku === sku);
@@ -2416,12 +2532,19 @@ async function _loadAdjHistory(sku) {
   try {
     const hist = await getAdjustmentHistory(sku);
     if (!hist.length) { box.innerHTML = '<span style="color:var(--text-4)">No adjustments yet.</span>'; return; }
-    box.innerHTML = hist.map(h => `
-      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--surface-2)">
-        <span style="font-weight:600;color:${h.amount>=0?'var(--green)':'var(--red)'}">${h.amount>0?'+':''}${h.amount}</span>
+    box.innerHTML = hist.map(h => {
+      const tag = h.status === 'pending' ? '<span style="color:#B45309;font-size:10px;font-weight:700"> ⏳ PENDING</span>'
+                : h.status === 'rejected' ? '<span style="color:var(--red);font-size:10px;font-weight:700"> ✕ REJECTED</span>'
+                : h.status === 'approved' ? '<span style="color:var(--green);font-size:10px;font-weight:700"> ✓ APPROVED</span>'
+                : '';
+      const dim = (h.status === 'pending' || h.status === 'rejected') ? 'opacity:.6;' : '';
+      return `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--surface-2);${dim}">
+        <span style="font-weight:600;color:${h.amount>=0?'var(--green)':'var(--red)'}">${h.amount>0?'+':''}${h.amount}${tag}</span>
         <span style="flex:1;padding:0 10px;color:var(--text-2)">${h.reason||'—'}</span>
         <span style="color:var(--text-4);font-size:11px">${h.at?new Date(h.at).toLocaleString():''}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   } catch(e){ box.innerHTML = '<span style="color:var(--red)">Could not load history</span>'; }
 }
 
@@ -2433,10 +2556,12 @@ document.addEventListener('click', async (e) => {
     if (amt === '' || isNaN(parseFloat(amt))) { msg.style.color='var(--red)'; msg.textContent='Enter a number'; return; }
     msg.style.color='var(--text-3)'; msg.textContent='Saving…';
     try {
-      await applyAdjustment(_adjSku, amt, reason);
+      const res = await submitAdjustment(_adjSku, amt, reason);
       openAdjustModal(_adjSku);   // refresh figures + history
       renderTable();
-      document.getElementById('adj-msg').textContent='Saved ✓';
+      const m2 = document.getElementById('adj-msg');
+      if (res && res.pending) { m2.style.color='#B45309'; m2.textContent='Submitted ⏳ awaiting admin approval'; }
+      else { m2.style.color='var(--green)'; m2.textContent='Saved ✓'; }
     } catch(err){ msg.style.color='var(--red)'; msg.textContent='Error: '+err.message; }
   }
   if (e.target && e.target.id === 'adj-clear') {
@@ -2810,7 +2935,11 @@ const MODAL_FORMS = {
       {name:'vendor_name_short',label:'Vendor Short Name',type:'text',half:true},
       {name:'region',label:'Region',type:'select',opts:['Blr','CHN','HYD','NCR','PUN'],half:true},
       {name:'act_lead_time',label:'Actual Lead Time (days)',type:'number',half:true},
-      {name:'vendor_plus_ltime',label:'Vendor + Lead Time Label',type:'text',half:true},
+      {name:'is_vital',label:'Vital? (confirm with Procurement)',type:'select',opts:['No','Yes'],half:true},
+      {name:'vital_lead_time',label:'Vital Lead Time (days)',type:'number',half:true},
+      {name:'payment_days',label:'Payment Days (specific vendors)',type:'number',half:true},
+      {name:'conversion_days',label:'Conversion to Usable Size (days)',type:'number',half:true},
+      {name:'vendor_plus_ltime',label:'Vendor + Lead Time Label (auto-sum, days)',type:'number',half:false,readonly:true},
     ]
   },
   consumption: {
@@ -2845,7 +2974,7 @@ function _renderModalForm(tab){
       if(f.type==='select'){
         html2 += `<select class="form-inp form-select" name="${f.name}"><option value="">Select...</option>${f.opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
       } else {
-        html2 += `<input class="form-inp" type="${f.type}" name="${f.name}" placeholder="${f.label}">`;
+        html2 += `<input class="form-inp" type="${f.type}" name="${f.name}" placeholder="${f.label}"${f.readonly?' readonly style="opacity:.8;cursor:not-allowed"':''}>`;
       }
       html2 += '</div>';
       i++;
@@ -2858,7 +2987,7 @@ function _renderModalForm(tab){
         if(fld.type==='select'){
           html2 += `<select class="form-inp form-select" name="${fld.name}"><option value="">Select...</option>${fld.opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
         } else {
-          html2 += `<input class="form-inp" type="${fld.type}" name="${fld.name}" placeholder="${fld.label}">`;
+          html2 += `<input class="form-inp" type="${fld.type}" name="${fld.name}" placeholder="${fld.label}"${fld.readonly?' readonly style="opacity:.8;cursor:not-allowed"':''}>`;
         }
         html2 += '</div>';
       });
@@ -2868,6 +2997,37 @@ function _renderModalForm(tab){
   }
   html2 += '<div class="form-msg" id="form-msg"></div>';
   mb.innerHTML = html2;
+  if(tab==='vendor') _wireVendorAutoSum();
+}
+
+/* Vendor tab: live-sum "Vendor + Lead Time Label" from the day fields.
+   Sum = Actual Lead Time + Vital Lead Time (only if Vital=Yes) + Payment Days
+         + Conversion to Usable Size (days). */
+function _wireVendorAutoSum(){
+  const mb = document.getElementById('modal-body');
+  const sumFields = ['act_lead_time','vital_lead_time','payment_days','conversion_days'];
+  const out     = mb.querySelector('[name="vendor_plus_ltime"]');
+  const vital   = mb.querySelector('[name="is_vital"]');
+  const vitalLt = mb.querySelector('[name="vital_lead_time"]');
+  function recompute(){
+    const isVital = vital && vital.value === 'Yes';
+    if(vitalLt){
+      vitalLt.disabled = !isVital;
+      vitalLt.style.opacity = isVital ? '' : '.5';
+      if(!isVital) vitalLt.value = '';
+    }
+    let sum = 0;
+    sumFields.forEach(n=>{
+      if(n==='vital_lead_time' && !isVital) return;
+      const el = mb.querySelector(`[name="${n}"]`);
+      const v  = el ? parseFloat(el.value) : NaN;
+      if(!isNaN(v)) sum += v;
+    });
+    if(out) out.value = sum;
+  }
+  sumFields.forEach(n=>{ const el = mb.querySelector(`[name="${n}"]`); if(el) el.addEventListener('input', recompute); });
+  if(vital) vital.addEventListener('change', recompute);
+  recompute();
 }
 
 document.querySelector('.btn.primary').addEventListener('click', ()=>{
@@ -2903,6 +3063,14 @@ document.getElementById('modal-save').addEventListener('click', async ()=>{
     msg.textContent = 'Error: ' + error.message; msg.className = 'form-msg err';
   } else {
     msg.textContent = 'Saved successfully! Refresh to see changes.'; msg.className = 'form-msg ok';
+    // notify (activity feed + email) — only for materials items
+    try {
+      if (form.table === 'materials') {
+        const sku = record.sku || record.SKU || '(no SKU)';
+        const desc = record.material_description || record.material_desc || '';
+        notifyProcurement('New Item', `${sku}${desc ? ' — ' + desc : ''} added by ${(window._USER&&window._USER.email)||'admin'}`);
+      }
+    } catch(e){ console.warn('notify (new item) failed:', e.message); }
     setTimeout(()=>document.getElementById('add-modal').classList.remove('open'), 1500);
   }
 });
@@ -3375,6 +3543,7 @@ const UPLOAD_MAP = {
   "Type":                         { c:"materials", f:"type" },
   "Criticality":                  { c:"materials", f:"criticality" },
   "Season":                       { c:"materials", f:"season" },
+  "New Launch":                   { c:"materials", f:"new_launch" },
   "Cat Manager":                  { c:"materials", f:"cat_mgr" },
   "Reorder Type":                 { c:"materials", f:"str_reorder_type" },
   "BLR (B / blank)":              { c:"materials", f:"blr" },
@@ -3392,12 +3561,14 @@ const UPLOAD_MAP = {
   "Supplier MOQ":                 { c:"materials", f:"supplier_moq", num:true },
   "Unit Price":                   { c:"materials", f:"unit_price", num:true },
   "Consumption Per Month":        { c:"vm_classification", f:"consumption_per_month", num:true },
+  "Buffer Lead Time":             { c:"vm_classification", f:"buffer_lead_time", num:true },
   "Order Frequency":              { c:"vm_classification", f:"ord_freq", num:true },
-  "Min Qty":                      { c:"vm_classification", f:"min_qty", num:true },
-  "Max Qty":                      { c:"vm_classification", f:"max_qty", num:true },
+  "Helper":                       { c:"vm_classification", f:"helper" },
   "BLR Vendor 2":                 { c:"materials", f:"blr_v2" },
   "NCR Vendor 2":                 { c:"materials", f:"ncr_v2" },
   "CHN Vendor 2":                 { c:"materials", f:"chn_v2" },
+  "HYD Vendor 2":                 { c:"materials", f:"hyd_v2" },
+  "Season End Date":              { c:"materials", f:"season_end" },
   "BLR HUB Capacity":             { c:"materials", f:"blr_hub_capacity", num:true },
   "Distrbn MOQ":                  { c:"materials", f:"min_distrbn_qty", num:true },
   "Ratelist Name":                { c:"materials", f:"ratelist_name" },
@@ -3407,7 +3578,59 @@ const UPLOAD_MAP = {
   "Launch End Date":              { c:"materials", f:"launch_end" },
 };
 const TEMPLATE_HEADERS = Object.keys(UPLOAD_MAP);
+// Procurement gets a slimmed template (convenience only — fewer fields to fill).
+// SKU is always required (rows match by SKU). Removed columns still write if re-added.
+const PROCUREMENT_TEMPLATE_HEADERS = [
+  "SKU",
+  "Material Description",
+  "UOM",
+  "Material Category Desc",
+  "Category",
+  "Major Category",
+  "Classification",
+  "Type",
+  "Season",
+  "New Launch",
+  "Reorder Type",
+  "BLR (B / blank)",
+  "CHN (C / blank)",
+  "HYD (H / blank)",
+  "PUN (P / blank)",
+  "NCR (D / blank)",
+  "BLR Vendor (Name-LeadTime)",
+  "NCR Vendor",
+  "HYD Vendor",
+  "CHN Vendor",
+  "NCR Lead Time",
+  "HYD Lead Time",
+  "CHN Lead Time",
+  "Supplier MOQ",
+  "Unit Price",
+  "Consumption Per Month",
+  "BLR Vendor 2",
+  "NCR Vendor 2",
+  "CHN Vendor 2",
+  "HYD Vendor 2",
+  "BLR HUB Capacity",
+  "Distrbn MOQ",
+  "Seasonal Consumption",
+  "Launch Start Date",
+  "Season End Date",
+];
 const VALID_CRITICALITY = ["V.High","High","Med","Low"];
+
+// Fields that MUST be filled on every procurement upload row.
+// Excluded: the 5 region flags and the 4 Vendor-2 columns, plus Season End Date
+// (which is conditionally required only when New Launch = Yes — handled separately).
+const MANDATORY_UPLOAD_FIELDS = [
+  "Material Description","UOM","Material Category Desc","Category","Major Category",
+  "Classification","Type","Season","New Launch","Reorder Type",
+  "BLR Vendor (Name-LeadTime)","NCR Vendor","HYD Vendor","CHN Vendor",
+  "NCR Lead Time","HYD Lead Time","CHN Lead Time",
+  "Supplier MOQ","Unit Price","Consumption Per Month",
+  "BLR HUB Capacity","Distrbn MOQ","Seasonal Consumption","Launch Start Date",
+];
+const VALID_NEW_LAUNCH = ["yes","no"];
 
 let _uploadParsed = null;   // holds parsed+validated rows awaiting confirm
 
@@ -3422,7 +3645,7 @@ function _uploadModalHTML() {
       <div style="padding:22px" id="upload-body">
         <ol style="font-size:13px;color:var(--text-2);line-height:1.7;margin:0 0 16px 18px;padding:0">
           <li>Download the template and fill one row per material (SKU is required).</li>
-          <li>Existing SKU = update · New SKU = added.</li>
+          <li>Existing SKU = update. New SKUs need Consumption Per Month, Buffer Lead Time, Order Frequency and Helper filled for Min/Max to compute. A later rebuild reconciles against the master sheet.</li>
           <li>Upload the file — you'll see a preview before anything is saved.</li>
         </ol>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px">
@@ -3439,8 +3662,60 @@ function _uploadModalHTML() {
 }
 
 function _downloadTemplate() {
-  const sample = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,15,30,5,19,"","","",1000,10,"RL-2024","PRDSKU01",25,"2024-04-01","2024-12-31"];
-  const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, sample]);
+  // Sample values keyed by EXACT header name. Any header not listed gets "".
+  // Keyed (not positional) so adding/removing columns can never misalign the row.
+  const SAMPLE = {
+    "SKU": "ACRPRP1",
+    "Material Description": "Acrylic Baggage Tag Clear 2mm 85mmx55mm",
+    "UOM": "nos",
+    "Material Category Desc": "Acrylic Products",
+    "Category": "Acrylic Products",
+    "Major Category": "Acrylic",
+    "Classification": "Class A",
+    "Type": "Class A",
+    "Criticality": "Low",
+    "Season": "C&D",
+    "New Launch": "Yes",
+    "Cat Manager": "B-Print&Stationery",
+    "Reorder Type": "Hub/Req",
+    "BLR (B / blank)": "B",
+    "CHN (C / blank)": "C",
+    "HYD (H / blank)": "H",
+    "PUN (P / blank)": "P",
+    "NCR (D / blank)": "D",
+    "BLR Vendor (Name-LeadTime)": "Canvera-3",
+    "NCR Vendor": "CS",
+    "NCR Lead Time": 3,
+    "HYD Vendor": "BLR VM",
+    "HYD Lead Time": 3,
+    "CHN Vendor": "Vendor-X",
+    "CHN Lead Time": 3,
+    "Supplier MOQ": 144,
+    "Unit Price": 18.5,
+    "Consumption Per Month": 15,
+    "Buffer Lead Time": 5,
+    "Order Frequency": 30,
+    "Helper": "High-HV-15",
+    "BLR Vendor 2": "",
+    "NCR Vendor 2": "",
+    "CHN Vendor 2": "",
+    "HYD Vendor 2": "",
+    "BLR HUB Capacity": 1000,
+    "Distrbn MOQ": 10,
+    "Ratelist Name": "RL-2024",
+    "Product SKU": "PRDSKU01",
+    "Seasonal Consumption": 25,
+    "Launch Start Date": "2024-04-01",
+    "Season End Date": "2024-12-31",
+    "Launch End Date": "2024-12-31",
+  };
+
+  // procurement gets the slimmed header set; everyone else gets the full one
+  const role = (window._USER || {}).role;
+  const headers = (role === 'procurement') ? PROCUREMENT_TEMPLATE_HEADERS : TEMPLATE_HEADERS;
+  const sample = headers.map(h => (h in SAMPLE ? SAMPLE[h] : ""));
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Materials Upload");
   XLSX.writeFile(wb, "material_upload_template.xlsx");
@@ -3481,7 +3756,43 @@ function _parseUpload(file) {
       if (crit && !VALID_CRITICALITY.includes(crit)) {
         errors.push(`Row ${rowNum} (${sku}): Criticality "${crit}" invalid — use V.High/High/Med/Low`);
       }
+
+      // ── Mandatory-field validation (procurement: every row must be complete) ──
+      // Only enforced when the file actually contains these columns, so admin's
+      // full template and the procurement template are both handled gracefully.
+      const _missing = [];
+      MANDATORY_UPLOAD_FIELDS.forEach(h => {
+        if (!(h in row)) return;                       // column not in this file → skip
+        const v = String(row[h] == null ? '' : row[h]).trim();
+        if (v === '') _missing.push(h);
+      });
+      if (_missing.length) {
+        errors.push(`Row ${rowNum} (${sku}): missing required field(s) — ${_missing.join(', ')}`);
+      }
+
+      // New Launch must be Yes/No if present
+      const newLaunchRaw = String(row['New Launch']==null?'':row['New Launch']).trim();
+      const newLaunch = newLaunchRaw.toLowerCase();
+      if (('New Launch' in row) && newLaunchRaw !== '' && !VALID_NEW_LAUNCH.includes(newLaunch)) {
+        errors.push(`Row ${rowNum} (${sku}): New Launch "${newLaunchRaw}" invalid — enter Yes or No`);
+      }
+      // Conditional: New Launch = Yes → Season End Date is mandatory
+      if (newLaunch === 'yes' && ('Season End Date' in row)) {
+        const seasonEnd = String(row['Season End Date']==null?'':row['Season End Date']).trim();
+        if (seasonEnd === '') {
+          errors.push(`Row ${rowNum} (${sku}): New Launch is "Yes" so Season End Date is required`);
+        }
+      }
+
       const isNew = !existingSkus.has(sku);
+      if (isNew) {
+        const consVal = String(row['Consumption Per Month']||'').trim();
+        if (!consVal) {
+          warnings.push(`Row ${rowNum} (${sku}): NEW SKU with no Consumption Per Month — Min/Max will stay "—". Fill Consumption, Buffer Lead Time, Order Frequency and Helper for the formula to compute.`);
+        } else {
+          warnings.push(`Row ${rowNum} (${sku}): NEW SKU — make sure Buffer Lead Time, Order Frequency and Helper are filled too, or Min/Max may be wrong. A later rebuild will reconcile against the master sheet.`);
+        }
+      }
       const today = new Date().toISOString().slice(0,10);
       let launchStartVal = String(row['Launch Start Date']||'').trim();
       const launchEndVal = String(row['Launch End Date']||'').trim();
@@ -3527,28 +3838,40 @@ function _showUploadError(msg){
 function _renderUploadPreview(total, updates, news, errors, warnings) {
   warnings = warnings || [];
   const box = document.getElementById('upload-preview');
-  const canSave = total>0;
+  const hasErrors = errors.length > 0;
+  const canSave = total > 0 && !hasErrors;     // errors BLOCK the save
+  window._uploadHasErrors = hasErrors;          // guard read by _saveUpload
   box.innerHTML = `
     <div style="border-top:1px solid var(--border);padding-top:16px">
       <div style="font-weight:700;color:var(--text-2);font-size:12px;text-transform:uppercase;margin-bottom:10px">Preview</div>
       <div style="display:flex;gap:10px;margin-bottom:14px">
         <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">TOTAL ROWS</div><div style="font-size:22px;font-weight:700;color:var(--navy)">${total}</div></div>
         <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">WILL UPDATE</div><div style="font-size:22px;font-weight:700;color:var(--orange)">${updates}</div></div>
-        <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">NEW ITEMS</div><div style="font-size:22px;font-weight:700;color:var(--green)">${news}</div></div>
-        <div style="flex:1;background:${errors.length?'var(--red-soft)':'var(--surface)'};border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">ERRORS</div><div style="font-size:22px;font-weight:700;color:${errors.length?'var(--red)':'var(--text-4)'}">${errors.length}</div></div>
+        <div style="flex:1;background:${news?'#FFF4E0':'var(--surface)'};border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">NEW (no VM data)</div><div style="font-size:22px;font-weight:700;color:${news?'#854F0B':'var(--text-4)'}">${news}</div></div>
+        <div style="flex:1;background:${hasErrors?'var(--red-soft)':'var(--surface)'};border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">ERRORS</div><div style="font-size:22px;font-weight:700;color:${hasErrors?'var(--red)':'var(--text-4)'}">${errors.length}</div></div>
       </div>
-      ${errors.length?`<div style="background:var(--red-soft);color:var(--red);padding:10px 12px;border-radius:6px;font-size:12px;max-height:140px;overflow:auto;margin-bottom:10px">${errors.slice(0,50).map(e=>`<div>${e}</div>`).join('')}${errors.length>50?`<div>…and ${errors.length-50} more</div>`:''}</div>`:''}
+      ${hasErrors?`<div id="upload-error-box" style="background:var(--red-soft);color:var(--red);padding:12px 14px;border-radius:6px;font-size:12px;max-height:160px;overflow:auto;margin-bottom:10px"><b>⚠ ${errors.length} error${errors.length>1?'s':''} found — the whole file is blocked. Fix ${errors.length>1?'these':'this'} in your Excel and re-upload; nothing saves until all are cleared:</b>${errors.slice(0,50).map(e=>`<div style="margin-top:4px">• ${e}</div>`).join('')}${errors.length>50?`<div>…and ${errors.length-50} more</div>`:''}</div>`:''}
       ${warnings.length?`<div style="background:#FFF4E0;color:#854F0B;padding:10px 12px;border-radius:6px;font-size:12px;max-height:120px;overflow:auto;margin-bottom:14px"><b>Warnings (allowed):</b>${warnings.slice(0,30).map(w=>`<div>${w}</div>`).join('')}${warnings.length>30?`<div>…and ${warnings.length-30} more</div>`:''}</div>`:''}
       <div style="display:flex;gap:8px;align-items:center">
-        <button id="upload-confirm" class="btn primary" ${canSave?'':'disabled style="opacity:.5;cursor:not-allowed"'}>Confirm & Save ${total} rows</button>
+        <button id="upload-confirm" class="btn primary" ${canSave?'':'disabled style="opacity:.5;cursor:not-allowed"'}>${hasErrors?'Cannot save — fix errors first':`Confirm & Save ${total} rows`}</button>
         <span id="upload-msg" style="font-size:12px"></span>
       </div>
-      ${errors.length?`<div style="font-size:11px;color:var(--text-4);margin-top:8px">Rows with errors will still save the valid fields; fix Criticality values in your file and re-upload if needed.</div>`:''}
     </div>`;
 }
 
 async function _saveUpload() {
   if (!_uploadParsed || !_uploadParsed.length) return;
+  // Hard guard: never save while there are validation errors (defense in depth).
+  if (window._uploadHasErrors) {
+    const ebox = document.getElementById('upload-error-box');
+    if (ebox) {
+      ebox.style.animation = 'none';
+      void ebox.offsetWidth;            // reflow to restart the animation
+      ebox.style.animation = 'shake 0.4s';
+      ebox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    return;
+  }
   const msg = document.getElementById('upload-msg');
   const btn = document.getElementById('upload-confirm');
   btn.disabled = true; btn.style.opacity = '.5';
@@ -3670,11 +3993,224 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target && e.target.id === 'dl-template') _downloadTemplate();
     if (e.target && e.target.id === 'upload-confirm') _saveUpload();
   });
+  // (restored) file picker for the materials Bulk Upload — was accidentally removed in v5
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'upload-file' && e.target.files.length) {
+      document.getElementById('upload-filename').textContent = e.target.files[0].name;
+      _parseUpload(e.target.files[0]);
+    }
+  });
 });
 
 
 /* ══════════════════════════════════════════════════════════════
-   BULK ADJUSTMENT UPLOAD  — 3-column file: SKU / Adjustment(±) / Reason
+   ACTIVITY BELL — in-app feed of new items + bulk uploads.
+   Reads the 'activity' collection. "Unread" tracked per-browser via
+   localStorage (last-seen timestamp). Independent of email.
+   ══════════════════════════════════════════════════════════════ */
+function _activityPanelHTML(){
+  return `
+  <div id="activity-panel" style="display:none;position:fixed;top:64px;right:20px;width:380px;max-height:70vh;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);z-index:2200">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg)">
+      <span style="font-weight:700;color:var(--navy)">Recent activity</span>
+      <button id="activity-mark-read" style="border:none;background:none;color:var(--blue);font-size:12px;cursor:pointer">Mark all read</button>
+    </div>
+    <div id="activity-list" style="padding:6px 0"><div style="padding:16px;color:var(--text-3);font-size:13px">Loading…</div></div>
+  </div>`;
+}
+
+function _activityLastSeen(){
+  try { return localStorage.getItem('printo_activity_seen') || ''; } catch(e){ return ''; }
+}
+function _setActivitySeen(ts){
+  try { localStorage.setItem('printo_activity_seen', ts); } catch(e){}
+}
+
+async function _loadActivity(){
+  const list = document.getElementById('activity-list');
+  try {
+    const { collection, getDocs, query } = window._fsApi;
+    const snap = await getDocs(collection(window._FS, 'activity'));
+    let items = [];
+    snap.forEach(d => items.push(d.data()));
+    items.sort((a,b) => (b.at||'').localeCompare(a.at||''));
+    items = items.slice(0, 40);   // newest 40
+
+    const seen = _activityLastSeen();
+    const unread = items.filter(i => (i.at||'') > seen).length;
+    const badge = document.getElementById('activity-badge');
+    if (badge){
+      if (unread > 0){ badge.style.display=''; badge.textContent = unread > 9 ? '9+' : String(unread); }
+      else badge.style.display='none';
+    }
+
+    if (!items.length){ list.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:13px">No activity yet.</div>'; return; }
+    const icon = t => t==='Bulk Upload' ? '⬆' : t==='New Item' ? '➕' : t==='Item Deleted' ? '🗑' : t==='Bulk Adjustment' ? '📦' : '✏';
+    list.innerHTML = items.map(i => {
+      const isNew = (i.at||'') > seen;
+      let when = '';
+      try { when = new Date(i.at).toLocaleString('en-IN'); } catch(e){ when = i.at||''; }
+      const firstLine = (i.details||'').split('\n')[0];
+      return `<div style="padding:10px 16px;border-bottom:1px solid var(--surface);${isNew?'background:#FFF7ED':''}">
+        <div style="display:flex;gap:8px;align-items:baseline">
+          <span>${icon(i.type)}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:var(--text-1);font-weight:600">${i.type||'Activity'}${isNew?' <span style=\"color:var(--orange);font-size:11px\">new</span>':''}</div>
+            <div style="font-size:12px;color:var(--text-2);word-break:break-word">${firstLine}</div>
+            <div style="font-size:11px;color:var(--text-4);margin-top:2px">${i.user||''} · ${when}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // remember newest timestamp for "mark read"
+    list.dataset.newest = items[0].at || '';
+  } catch(e){
+    list.innerHTML = `<div style="padding:16px;color:var(--red);font-size:13px">Could not load activity: ${e.message}</div>`;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.body.insertAdjacentHTML('beforeend', _activityPanelHTML());
+  const bell = document.getElementById('activity-bell-btn');
+  const panel = document.getElementById('activity-panel');
+  if (bell) bell.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const showing = panel.style.display !== 'none';
+    panel.style.display = showing ? 'none' : 'block';
+    if (!showing) _loadActivity();
+  });
+  document.addEventListener('click', (e) => {
+    if (panel && panel.style.display!=='none' && !panel.contains(e.target) && e.target!==bell) panel.style.display='none';
+    if (e.target && e.target.id === 'activity-mark-read'){
+      const newest = document.getElementById('activity-list').dataset.newest || new Date().toISOString();
+      _setActivitySeen(newest);
+      _loadActivity();
+    }
+  });
+  // initial unread count once Firestore is ready
+  const _initBell = () => { if (window._FS && window._fsApi) _loadActivity(); else setTimeout(_initBell, 800); };
+  setTimeout(_initBell, 1500);
+});
+
+/* ══════════════════════════════════════════════════════════════
+   APPROVALS QUEUE (admin) — review pending stock adjustments.
+   Maker-checker: non-admin adjustments wait here until Approve/Reject.
+   ══════════════════════════════════════════════════════════════ */
+function _approvalsPanelHTML(){
+  return `
+  <div id="approvals-panel" style="display:none;position:fixed;top:64px;right:20px;width:460px;max-height:74vh;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);z-index:2200">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg)">
+      <span style="font-weight:700;color:var(--navy)">Pending approvals</span>
+      <button id="approvals-refresh" style="border:none;background:none;color:var(--blue);font-size:12px;cursor:pointer">Refresh</button>
+    </div>
+    <div id="approvals-list" style="padding:6px 0"><div style="padding:16px;color:var(--text-3);font-size:13px">Loading…</div></div>
+  </div>`;
+}
+
+async function _renderApprovals(){
+  const list = document.getElementById('approvals-list');
+  const badge = document.getElementById('approvals-badge');
+  try {
+    const pend = await loadPendingAdjustments();
+    if (badge){ if (pend.length){ badge.style.display=''; badge.textContent = pend.length>9?'9+':String(pend.length); } else badge.style.display='none'; }
+    if (!pend.length){ list.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:13px">No pending adjustments.</div>'; return; }
+    list.innerHTML = pend.map(p => {
+      let when=''; try{ when=new Date(p.at).toLocaleString('en-IN'); }catch(e){ when=p.at||''; }
+      return `<div style="padding:12px 16px;border-bottom:1px solid var(--surface)" data-id="${p._id}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-family:monospace;font-size:13px;font-weight:600;color:var(--navy)">${p.sku}</span>
+          <span style="font-weight:700;color:${p.amount>=0?'var(--green)':'var(--red)'}">${p.amount>0?'+':''}${p.amount}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-2);margin:2px 0">${p.desc||''}</div>
+        <div style="font-size:11px;color:var(--text-4)">${p.reason||'(no reason)'} · ${p.maker||''}${p.maker_region?' ('+p.maker_region+')':''} · ${when}</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="ap-approve" data-id="${p._id}" style="background:var(--green,#1D9E75);color:#fff;border:none;padding:5px 14px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">Approve</button>
+          <button class="ap-reject" data-id="${p._id}" style="background:var(--red);color:#fff;border:none;padding:5px 14px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">Reject</button>
+        </div>
+      </div>`;
+    }).join('');
+    // stash records for handlers
+    window._pendingCache = {}; pend.forEach(p => window._pendingCache[p._id] = p);
+  } catch(e){
+    list.innerHTML = `<div style="padding:16px;color:var(--red);font-size:13px">Could not load: ${e.message}</div>`;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.body.insertAdjacentHTML('beforeend', _approvalsPanelHTML());
+  const btn = document.getElementById('approvals-btn');
+  const panel = document.getElementById('approvals-panel');
+
+  // show the button + load badge only for admin
+  const _initApprovals = () => {
+    if (!(window._USER && window._fsApi)) { setTimeout(_initApprovals, 800); return; }
+    if ((window._USER||{}).role === 'admin') {
+      if (btn) btn.style.display = '';
+      _renderApprovals();
+    }
+  };
+  setTimeout(_initApprovals, 1600);
+
+  if (btn) btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const showing = panel.style.display !== 'none';
+    panel.style.display = showing ? 'none' : 'block';
+    if (!showing) _renderApprovals();
+  });
+  document.addEventListener('click', async (e) => {
+    if (panel && panel.style.display!=='none' && !panel.contains(e.target) && e.target!==btn && !e.target.closest('#approvals-btn')) panel.style.display='none';
+    if (e.target && e.target.id === 'approvals-refresh') _renderApprovals();
+    if (e.target && e.target.classList && e.target.classList.contains('ap-approve')) {
+      const rec = (window._pendingCache||{})[e.target.dataset.id]; if (!rec) return;
+      e.target.disabled = true; e.target.textContent = '…';
+      try { await approvePending(rec); renderTable(); _renderApprovals(); }
+      catch(err){ alert('Approve failed: '+err.message); _renderApprovals(); }
+    }
+    if (e.target && e.target.classList && e.target.classList.contains('ap-reject')) {
+      const rec = (window._pendingCache||{})[e.target.dataset.id]; if (!rec) return;
+      e.target.disabled = true; e.target.textContent = '…';
+      try { await rejectPending(rec); _renderApprovals(); }
+      catch(err){ alert('Reject failed: '+err.message); _renderApprovals(); }
+    }
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════
+   DELETE SKU (admin only) — type DELETE to confirm, like delete_items.py.
+   Removes the SKU's docs from: materials, vm_classification,
+   consumption_2025, live_stock. The stock_adjustments audit log is
+   KEPT on purpose (audit trail should survive item deletion).
+   ══════════════════════════════════════════════════════════════ */
+async function deleteSkuFlow(sku){
+  if ((window._USER||{}).role !== 'admin') { alert('Deleting items is admin-only.'); return; }
+  const item = DATA.find(r => r.sku === sku);
+  const desc = item && item.description ? `\n${item.description}` : '';
+  const typed = prompt(`⚠ You are about to PERMANENTLY delete:\n\nSKU: ${sku}${desc}\n\nThis removes it from materials, VM classification, consumption and live stock. This cannot be undone.\n\nType DELETE (in capitals) to confirm:`);
+  if (typed === null) return;                       // cancelled
+  if (typed.trim() !== 'DELETE') { alert('Not deleted — you must type DELETE exactly.'); return; }
+  try {
+    const { doc, deleteDoc } = window._fsApi;
+    const colls = ['materials','vm_classification','consumption_2025','live_stock'];
+    await Promise.all(colls.map(c => deleteDoc(doc(window._FS, c, sku)).catch(e => {
+      // missing doc in a collection is fine; rethrow real errors
+      if (!/not.?found/i.test(e.message||'')) throw e;
+    })));
+    // update local state + UI
+    DATA = DATA.filter(r => r.sku !== sku);
+    renderTable();
+    try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
+    // email notification (same channel as edits)
+    try { notifyProcurement('Item Deleted', `SKU ${sku} was deleted by ${(window._USER||{}).email||'admin'}${desc ? ' — ' + (item.description||'') : ''}`); } catch(e){}
+    alert(`✓ ${sku} deleted.`);
+  } catch(err){
+    alert('Delete failed: ' + (err.message||err));
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   BULK ADJUSTMENT UPLOAD — SKU / Description (ref) / Adjustment(±) / Reason
    - Adjustment is a DELTA (+50 adds, -20 subtracts) — same as the single Adjust flow.
    - Each valid row runs through applyAdjustment() → live_stock update + stock_adjustments audit entry.
    - Gated by the 'bulk_adjust' permission (⚙ Permissions → "Bulk adjustment upload").
@@ -3842,7 +4378,7 @@ async function _saveAdjUpload() {
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK);
       await Promise.all(chunk.map(async (r) => {
-        try { await applyAdjustment(r.sku, r.amount, r.reason); }
+        try { await submitAdjustment(r.sku, r.amount, r.reason); }
         catch(e){ failed.push(`${r.sku}: ${e.message}`); }
       }));
       done = Math.min(i + CHUNK, rows.length);
@@ -3857,8 +4393,11 @@ async function _saveAdjUpload() {
       msg.textContent = `Done with ${failed.length} failure(s) — see console. ${rows.length - failed.length} applied.`;
       console.warn('Bulk adjustment failures:', failed);
     } else {
-      msg.style.color = 'var(--green)';
-      msg.textContent = `Done — ${rows.length} adjustments applied ✓`;
+      const isAdmin = (window._USER||{}).role === 'admin';
+      msg.style.color = isAdmin ? 'var(--green)' : '#B45309';
+      msg.textContent = isAdmin
+        ? `Done — ${rows.length} adjustments applied ✓`
+        : `Submitted — ${rows.length} adjustments ⏳ awaiting admin approval`;
     }
     _adjUploadRows = null;
 
