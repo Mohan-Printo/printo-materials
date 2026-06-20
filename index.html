@@ -90,7 +90,7 @@
 </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch, deleteField }
+  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -109,7 +109,7 @@
   const _auth = getAuth(_app);
   // expose a tiny compat-like wrapper so the rest of the (compat-style) code works unchanged
   window._FS = _fs;
-  window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch, deleteField };
+  window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch };
   window._authApi = { auth: _auth, signInWithEmailAndPassword, signOut, onAuthStateChanged };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
@@ -837,6 +837,13 @@
 
 
   .detail-item dt span{display:inline-block;padding:1px 5px;background:var(--orange-soft);color:var(--orange-hover);border-radius:3px;margin-left:4px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
 </style>
 </head>
 <body>
@@ -904,18 +911,12 @@
         <option value="region">Region users (all regions)</option>
         <option value="region_inventory">Region Inventory (per-region inventory teams)</option>
       </select>
-      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Specific user (optional)</label>
-      <select id="perms-user" style="width:100%;padding:10px;border:1px solid #C4CAD4;border-radius:8px;font-size:14px;margin-bottom:6px">
-        <option value="">All users with this role (role default)</option>
-      </select>
-      <div id="perms-user-hint" style="font-size:11px;color:#9CA3AF;margin-bottom:18px">Pick an email to give that person access different from the role default. Leave on "role default" to set the baseline for everyone with this role.</div>
       <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px">Editable fields <span id="perms-count" style="color:#9CA3AF;font-weight:400"></span></div>
       <div id="perms-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;max-height:340px;overflow:auto;padding:4px 2px"></div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:16px">
         <button id="perms-save" style="background:#1B3560;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-weight:600;cursor:pointer">Save</button>
         <button id="perms-selectall" style="background:#f1f2f4;color:#374151;border:none;padding:10px 16px;border-radius:8px;font-weight:500;cursor:pointer">Select all</button>
         <button id="perms-clearall" style="background:#f1f2f4;color:#374151;border:none;padding:10px 16px;border-radius:8px;font-weight:500;cursor:pointer">Clear all</button>
-        <button id="perms-remove-override" style="display:none;background:#FEE2E2;color:#B91C1C;border:none;padding:10px 16px;border-radius:8px;font-weight:500;cursor:pointer">Remove override</button>
         <span id="perms-msg" style="font-size:13px;margin-left:6px"></span>
       </div>
       <div style="font-size:11px;color:#9CA3AF;margin-top:12px">Note: Region users always keep edit access to their own region's vendor block, regardless of these toggles. Stock adjust + bulk toggles apply per role. Region Inventory users see only their own region's items. Changes apply when each user next loads the tool.</div>
@@ -1001,7 +1002,7 @@
         <button class="btn" id="activity-bell-btn" title="Recent activity" style="position:relative">🔔<span id="activity-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center"></span></button>
         <button class="btn admin-only" id="approvals-btn" title="Review pending stock adjustments" style="position:relative;display:none">✅ Approvals<span id="approvals-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#B45309;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center"></span></button>
         <button class="btn" id="refresh-data-btn" title="Reload latest data from the database">🔄 Refresh data</button>
-        <button class="btn" id="export-csv-btn">⬇ Export CSV</button>
+        <button class="btn">⬇ Export CSV</button>
         <button class="btn admin-only" id="bulk-upload-btn" title="Upload many materials from the Excel template">⬆ Bulk Upload</button>
         <button class="btn" id="bulk-adjust-btn" title="Upload many stock adjustments at once (SKU / ± amount / reason)" style="display:none">📦 Bulk Adjust</button>
         <button class="btn admin-only" id="perms-btn" title="Manage who can edit which fields">⚙ Permissions</button>
@@ -1326,7 +1327,9 @@ function rowHTML(r,idx){
       <div class="detail-item"><dt>Season</dt><dd>${r.season||"—"}</dd></div>
       <div class="detail-item"><dt>Seasonal Consumption</dt><dd>${r.seasonal_consumption!=null?fmtNum(r.seasonal_consumption):"—"}</dd></div>
       <div class="detail-item"><dt>Launch Start Date</dt><dd>${r.launch_start||"—"}</dd></div>
-      <div class="detail-item"><dt>Season End Date</dt><dd>${r.launch_end||"—"}</dd></div>
+      <div class="detail-item"><dt>New Launch</dt><dd>${r.new_launch||"—"}</dd></div>
+      <div class="detail-item"><dt>Season End Date</dt><dd>${r.season_end||"—"}</dd></div>
+      <div class="detail-item"><dt>Launch End Date</dt><dd>${r.launch_end||"—"}</dd></div>
       <div class="detail-item"><dt>Ratelist Name</dt><dd>${r.ratelist_name||"—"}</dd></div>
       <div class="detail-item"><dt>Product SKU</dt><dd>${r.product_sku||"—"}</dd></div>
       <div class="detail-item"><dt>Distrbn MOQ</dt><dd>${r.min_distrbn_qty!=null?fmtNum(r.min_distrbn_qty):"—"}</dd></div>
@@ -1434,7 +1437,7 @@ function syncTabs(){
   if(state.major||state.category)document.querySelector('[data-menu="categories"]').classList.add("active");
   else if(state.region)document.querySelector('[data-menu="regions"]').classList.add("active");
   else if(state.criticality)document.querySelector('[data-menu="criticality"]').classList.add("active");
-  else if(state.status&&state.status!=="Active")document.querySelector('[data-menu="status"]').classList.add("active");
+  else if(state.status)document.querySelector('[data-menu="status"]').classList.add("active");
   else document.querySelector('[data-tab="all"]').classList.add("active");
 }
 
@@ -1535,7 +1538,7 @@ function bucketize(rows,dim){
   if(dim==="status"){buckets["Active"]=rows.filter(d=>!isDiscontinued(d));buckets["Discontinued"]=rows.filter(d=>isDiscontinued(d));return buckets}
   if(dim==="vendor"){rows.forEach(r=>{const v=r.regions?.BLR?.vendor;if(v&&v!=="CS"){if(!buckets[v])buckets[v]=[];buckets[v].push(r)}});return buckets}
   if(dim==="reorder_type"){rows.forEach(r=>{const v=r.regions?.BLR?.str_reorder||"Unspecified";if(!buckets[v])buckets[v]=[];buckets[v].push(r)});return buckets}
-  if(dim==="sku_top10")return rows.reduce((acc,r)=>{acc[r.sku]=[r];return acc},{});
+  if(dim==="sku_top10")return rows.slice(0,10).reduce((acc,r)=>{acc[r.sku]=[r];return acc},{});
   rows.forEach(r=>{const k=r[dim]||"—";if(!buckets[k])buckets[k]=[];buckets[k].push(r)});
   return buckets;
 }
@@ -1627,62 +1630,20 @@ function handleChartConfig(pillEl){
 // (next calendar day) or the user clicks "Refresh data".
 const CACHE_KEY = 'printo_mat_cache_v1';
 function _todayStr(){ return new Date().toISOString().slice(0,10); }
-
-// ── IndexedDB key-value store (localStorage's ~5MB cap can't hold the dataset;
-//    materials alone is ~4MB, so localStorage.setItem threw QuotaExceededError and
-//    the cache silently never saved → every login re-downloaded everything.
-//    IndexedDB handles hundreds of MB, so repeat logins now load from cache.) ──
-const _IDB_NAME = 'printo_mat_db', _IDB_STORE = 'cache';
-function _idbOpen(){
-  return new Promise((resolve, reject) => {
-    try {
-      const req = indexedDB.open(_IDB_NAME, 1);
-      req.onupgradeneeded = () => { req.result.createObjectStore(_IDB_STORE); };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    } catch(e){ reject(e); }
-  });
-}
-function _idbGet(key){
-  return _idbOpen().then(db => new Promise((resolve, reject) => {
-    const r = db.transaction(_IDB_STORE,'readonly').objectStore(_IDB_STORE).get(key);
-    r.onsuccess = () => resolve(r.result);
-    r.onerror   = () => reject(r.error);
-  }));
-}
-function _idbSet(key, val){
-  return _idbOpen().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction(_IDB_STORE,'readwrite');
-    tx.objectStore(_IDB_STORE).put(val, key);
-    tx.oncomplete = () => resolve(true);
-    tx.onerror    = () => reject(tx.error);
-  }));
-}
-function _idbDel(key){
-  return _idbOpen().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction(_IDB_STORE,'readwrite');
-    tx.objectStore(_IDB_STORE).delete(key);
-    tx.oncomplete = () => resolve(true);
-    tx.onerror    = () => reject(tx.error);
-  }));
-}
-
-async function _loadCache(){
+function _loadCache(){
   try {
-    const obj = await _idbGet(CACHE_KEY);
-    if (!obj) return null;
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
     if (obj.date !== _todayStr()) return null;   // expired (new day)
     return obj;
   } catch(e){ return null; }
 }
-async function _saveCache(payload){
-  try { await _idbSet(CACHE_KEY, Object.assign({date:_todayStr()}, payload)); }
+function _saveCache(payload){
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(Object.assign({date:_todayStr()}, payload))); }
   catch(e){ console.warn('cache save failed (data still works this session):', e.message); }
 }
-async function _clearCache(){
-  try { await _idbDel(CACHE_KEY); } catch(e){}
-  try { localStorage.removeItem(CACHE_KEY); } catch(e){}   // also drop any legacy localStorage cache
-}
+function _clearCache(){ try{ localStorage.removeItem(CACHE_KEY); }catch(e){} }
 
 async function _fetchAll(collectionName) {
   const { collection, getDocs } = window._fsApi;
@@ -1809,7 +1770,7 @@ function _wireLogin(){
 async function _doLogout(){
   try { await window._authApi.signOut(window._authApi.auth); } catch(e){}
   // hard reload to clear all in-memory data (so no region data lingers)
-  try { await _clearCache(); } catch(e){}
+  try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
   location.reload();
 }
 
@@ -1865,12 +1826,12 @@ function _applyUserAccessUI(){
   const bulkAdjBtn = document.getElementById('bulk-adjust-btn');
   if (bulkAdjBtn) bulkAdjBtn.style.display = _canBulkAdjust() ? '' : 'none';
 
-  // Permissions + Add Material are STRICTLY admin-only. (Bug fix: the .admin-only CSS
-  // class only hid these for region users — team logins could still see them.)
-  ['perms-btn','add-material-btn'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = _isAdmin() ? '' : 'none';
-  });
+  // Permissions is STRICTLY admin-only.
+  const permsBtnEl = document.getElementById('perms-btn');
+  if (permsBtnEl) permsBtnEl.style.display = _isAdmin() ? '' : 'none';
+  // Add Material: admin always, plus any role granted 'add_material'.
+  const addMatEl = document.getElementById('add-material-btn');
+  if (addMatEl) addMatEl.style.display = _canAddMaterial() ? '' : 'none';
 
   // Region-scoped users (region + region_inventory) are locked to one region —
   // hide the Region filter menu/tab. Team users and admin keep all regions.
@@ -1888,7 +1849,7 @@ function _canEditAnything(){
   if (r === 'admin' || r === 'region') return true;
   if (r === 'procurement') return true;
   if (r === 'commercial' || r === 'inventory' || r === 'region_inventory'){
-    const s = _effectiveAllowFor(window._USER||{});
+    const s = TEAM_EDITABLE_FIELDS[r];
     return !!(s && s.size > 0);   // includes stock/bulk_adjust, so they won't be 'view-only'
   }
   return false;
@@ -1917,7 +1878,7 @@ const FIELD_CATALOG = [
   { key:'season', label:'Season' },
   { key:'seasonal_consumption', label:'Seasonal Consumption' },
   { key:'launch_start', label:'Launch Start Date' },
-  { key:'launch_end', label:'Season End Date' },
+  { key:'launch_end', label:'Launch End Date' },
   { key:'ratelist_name', label:'Ratelist Name' },
   { key:'product_sku', label:'Product SKU' },
   { key:'blr_vendor', label:'BLR Vendor' },
@@ -1928,6 +1889,7 @@ const FIELD_CATALOG = [
   { key:'stock', label:'⚙ Adjust stock quantity' },
   { key:'bulk_upload', label:'⚙ Bulk upload access' },
   { key:'bulk_adjust', label:'⚙ Bulk adjustment upload' },
+  { key:'add_material', label:'⚙ Add new material (+ Add Material button)' },
 ];
 const PERM_ROLES = ['procurement','commercial','inventory','region','region_inventory'];
 
@@ -1938,7 +1900,8 @@ const DEFAULT_PERMISSIONS = {
     'cat_mgr','unit_price','min_distrbn_qty',
     'supplier_moq','season','launch_start','launch_end','str_reorder_type',
     'seasonal_consumption','cities',
-    'blr_vendor','chn_vendor','hyd_vendor','ncr_vendor','pun_vendor'
+    'blr_vendor','chn_vendor','hyd_vendor','ncr_vendor','pun_vendor',
+    'add_material'
     // note: NO 'stock', NO 'bulk_upload' for procurement
   ],
   commercial: ['stock','bulk_upload'],   // can adjust stock + bulk upload
@@ -1958,12 +1921,6 @@ let TEAM_EDITABLE_FIELDS = {
   region_inventory: new Set(DEFAULT_PERMISSIONS.region_inventory),
 };
 
-// Per-USER field overrides: email (lowercase) -> Set of field keys.
-// When an entry exists for the logged-in user, it REPLACES that user's role default,
-// so each email (e.g. blr@printo.in vs hyd@printo.in) can get different access.
-// Populated from the config/user_permissions doc at boot.
-let USER_FIELD_OVERRIDES = {};
-
 // Load saved permissions from Firestore (config/permissions). Safe fallback to defaults.
 async function _loadPermissions(){
   try {
@@ -1978,26 +1935,9 @@ async function _loadPermissions(){
     } else {
       console.log('[PERMS] none saved — using defaults');
     }
-    // per-user overrides (email -> [field keys])
-    const usnap = await getDoc(doc(window._FS, 'config', 'user_permissions'));
-    if (usnap.exists()){
-      const ud = usnap.data() || {};
-      USER_FIELD_OVERRIDES = {};
-      Object.keys(ud).forEach(email => {
-        if (Array.isArray(ud[email])) USER_FIELD_OVERRIDES[String(email).toLowerCase()] = new Set(ud[email]);
-      });
-      console.log('[PERMS] per-user overrides loaded:', Object.keys(USER_FIELD_OVERRIDES).length);
-    }
   } catch(e){ console.warn('[PERMS] load failed, using defaults:', e.message); }
 }
 
-// Effective allow-set for a user: their per-email override if one exists, else the role default.
-function _effectiveAllowFor(u){
-  u = u || window._USER || {};
-  const email = String(u.email||'').toLowerCase();
-  if (email && USER_FIELD_OVERRIDES[email]) return USER_FIELD_OVERRIDES[email];
-  return TEAM_EDITABLE_FIELDS[u.role] || new Set();
-}
 // scope can be: a region code ('BLR'..), 'stock', OR a specific field key.
 function _canEditField(scope, fieldKey){
   const u = window._USER || {};
@@ -2006,7 +1946,7 @@ function _canEditField(scope, fieldKey){
 
   // Region users: their region's vendor block + stock (+ any field keys granted to 'region')
   if (role === 'region'){
-    const allow = _effectiveAllowFor(u);
+    const allow = TEAM_EDITABLE_FIELDS.region || new Set();
     if (scope === 'stock') return allow.has('stock');
     if (scope === u.region) return true;          // their region's vendor/lead block
     const key = fieldKey || scope;
@@ -2015,7 +1955,7 @@ function _canEditField(scope, fieldKey){
 
   // Team users + region_inventory: field-level allow-list
   if (role === 'procurement' || role === 'commercial' || role === 'inventory' || role === 'region_inventory'){
-    const allow = _effectiveAllowFor(u);
+    const allow = TEAM_EDITABLE_FIELDS[role] || new Set();
     if (scope === 'stock') return allow.has('stock');
     const key = fieldKey || scope;
     if (['BLR','CHN','HYD','PUN','NCR'].includes(scope)){
@@ -2030,17 +1970,23 @@ function _canEditField(scope, fieldKey){
 function _canBulkUpload(){
   const u = window._USER || {};
   if (u.role === 'admin') return true;
-  const allow = _effectiveAllowFor(u);
+  const allow = TEAM_EDITABLE_FIELDS[u.role] || new Set();
   return allow.has('bulk_upload');
 }
 // Bulk ADJUSTMENT upload: admin always; teams/region if granted 'bulk_adjust' in Permissions
 function _canBulkAdjust(){
   const u = window._USER || {};
   if (u.role === 'admin') return true;
-  const allow = _effectiveAllowFor(u);
+  const allow = TEAM_EDITABLE_FIELDS[u.role] || new Set();
   return allow.has('bulk_adjust');
 }
 function _isAdmin(){ return (window._USER||{}).role === 'admin'; }
+function _canAddMaterial(){
+  const u = window._USER || {};
+  if (u.role === 'admin') return true;
+  const allow = TEAM_EDITABLE_FIELDS[u.role] || new Set();
+  return allow.has('add_material');
+}
 // Does this user see all regions (admin + all team roles) or just one (region users)?
 function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region' && r!=='region_inventory'; }
 
@@ -2097,7 +2043,7 @@ function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'
 async function _bootApp() {
   try {
     let mats, vms, cons, live, ubuf;
-    const cached = await _loadCache();
+    const cached = _loadCache();
     if (cached) {
       // Loaded from today's cache — NO Firestore reads
       _prog(60, 'Loading from cache...');
@@ -2202,6 +2148,8 @@ async function _bootApp() {
         major_category: m.major_category || '',
         cat_manager: m.cat_mgr || '',
         season: m.season || '',
+        new_launch: m.new_launch || '',
+        season_end: m.season_end || '',
         launch_start: m.launch_start || m.launch_dt || '',
         launch_end: m.launch_end || '',
         ratelist_name: m.ratelist_name || '',
@@ -2722,7 +2670,7 @@ function openEditModal(sku) {
     ${_ef('Season','ed-season',r.season, '', P('season'))}
     ${_ef('Seasonal Consumption','ed-seasoncons',r.seasonal_consumption, '', P('seasonal_consumption'))}
     ${_efDate('Launch Start Date','ed-launch-start',r.launch_start, '', P('launch_start'))}
-    ${_efDate('Season End Date','ed-launch-end',r.launch_end, '', P('launch_end'))}
+    ${_efDate('Launch End Date','ed-launch-end',r.launch_end, '', P('launch_end'))}
     ${_ef('Ratelist Name','ed-ratelist',r.ratelist_name, '', P('ratelist_name'))}
     ${_ef('Product SKU','ed-productsku',r.product_sku, '', P('product_sku'))}
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px">Vendors${(_u.role==='region'||_u.role==='region_inventory')?' — '+_u.region:''}</div>
@@ -2890,8 +2838,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 /* ── EXPORT CSV ─────────────────────────────── */
-document.getElementById('export-csv-btn').addEventListener('click', function(e){
-  {
+document.querySelector('.btn').addEventListener('click', function(e){
+  if(this.textContent.includes('Export')){
     const list = applyFilters();
     const hdrs = ['SKU','Description','Major Category','Category','UOM','Criticality','Classification','Type','Supplier MOQ','Unit Price','Closing Stock','Cons/Month','Cons Value','Status','Cities'];
     const rows = list.map(r => [
@@ -3393,8 +3341,8 @@ function _renderLowStockAlert(rows, regionKey){
   const alerts = [];
   rows.forEach(r=>{
     const stock = r.closing_stock;
-    const minQ = r.min_qty;
-    const maxQ = r.max_qty;
+    const minQ = r._min_qty;
+    const maxQ = r._max_qty;
     if(stock==null || minQ==null) return;
     if(stock < minQ){
       const severity = stock===0 ? 'critical' : (stock < minQ*0.5 ? 'warn' : 'low');
@@ -3560,6 +3508,7 @@ const UPLOAD_MAP = {
   "Type":                         { c:"materials", f:"type" },
   "Criticality":                  { c:"materials", f:"criticality" },
   "Season":                       { c:"materials", f:"season" },
+  "New Launch":                   { c:"materials", f:"new_launch" },
   "Cat Manager":                  { c:"materials", f:"cat_mgr" },
   "Reorder Type":                 { c:"materials", f:"str_reorder_type" },
   "BLR (B / blank)":              { c:"materials", f:"blr" },
@@ -3583,34 +3532,70 @@ const UPLOAD_MAP = {
   "BLR Vendor 2":                 { c:"materials", f:"blr_v2" },
   "NCR Vendor 2":                 { c:"materials", f:"ncr_v2" },
   "CHN Vendor 2":                 { c:"materials", f:"chn_v2" },
+  "HYD Vendor 2":                 { c:"materials", f:"hyd_v2" },
+  "Season End Date":              { c:"materials", f:"season_end" },
   "BLR HUB Capacity":             { c:"materials", f:"blr_hub_capacity", num:true },
   "Distrbn MOQ":                  { c:"materials", f:"min_distrbn_qty", num:true },
   "Ratelist Name":                { c:"materials", f:"ratelist_name" },
   "Product SKU":                  { c:"materials", f:"product_sku" },
   "Seasonal Consumption":         { c:"vm_classification", f:"seasonal_consumption", num:true },
   "Launch Start Date":            { c:"materials", f:"launch_start" },
-  "Season End Date":              { c:"materials", f:"launch_end" },
+  "Launch End Date":              { c:"materials", f:"launch_end" },
 };
 const TEMPLATE_HEADERS = Object.keys(UPLOAD_MAP);
 // Procurement gets a slimmed template (convenience only — fewer fields to fill).
 // SKU is always required (rows match by SKU). Removed columns still write if re-added.
 const PROCUREMENT_TEMPLATE_HEADERS = [
   "SKU",
+  "Material Description",
+  "UOM",
+  "Material Category Desc",
+  "Category",
+  "Major Category",
   "Classification",
   "Type",
-  "Material Category Desc",
-  "UOM",
-  "Supplier MOQ",
   "Season",
+  "New Launch",
   "Reorder Type",
-  "Seasonal Consumption",
   "BLR (B / blank)",
   "CHN (C / blank)",
   "HYD (H / blank)",
   "PUN (P / blank)",
   "NCR (D / blank)",
+  "BLR Vendor (Name-LeadTime)",
+  "NCR Vendor",
+  "HYD Vendor",
+  "CHN Vendor",
+  "NCR Lead Time",
+  "HYD Lead Time",
+  "CHN Lead Time",
+  "Supplier MOQ",
+  "Unit Price",
+  "Consumption Per Month",
+  "BLR Vendor 2",
+  "NCR Vendor 2",
+  "CHN Vendor 2",
+  "HYD Vendor 2",
+  "BLR HUB Capacity",
+  "Distrbn MOQ",
+  "Seasonal Consumption",
+  "Launch Start Date",
+  "Season End Date",
 ];
 const VALID_CRITICALITY = ["V.High","High","Med","Low"];
+
+// Fields that MUST be filled on every procurement upload row.
+// Excluded: the 5 region flags and the 4 Vendor-2 columns, plus Season End Date
+// (which is conditionally required only when New Launch = Yes — handled separately).
+const MANDATORY_UPLOAD_FIELDS = [
+  "Material Description","UOM","Material Category Desc","Category","Major Category",
+  "Classification","Type","Season","New Launch","Reorder Type",
+  "BLR Vendor (Name-LeadTime)","NCR Vendor","HYD Vendor","CHN Vendor",
+  "NCR Lead Time","HYD Lead Time","CHN Lead Time",
+  "Supplier MOQ","Unit Price","Consumption Per Month",
+  "BLR HUB Capacity","Distrbn MOQ","Seasonal Consumption","Launch Start Date",
+];
+const VALID_NEW_LAUNCH = ["yes","no"];
 
 let _uploadParsed = null;   // holds parsed+validated rows awaiting confirm
 
@@ -3642,16 +3627,58 @@ function _uploadModalHTML() {
 }
 
 function _downloadTemplate() {
-  // full-template sample values, keyed by header so a subset stays aligned
-  const fullHeaders = TEMPLATE_HEADERS;
-  const fullSample  = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","nos","Acrylic Products","Acrylic Products","Acrylic","Class A","Class A","Low","C&D","B-Print&Stationery","Hub/Req","B","C","H","P","D","Canvera-3","CS",3,"NO",3,"BLR VM",3,144,18.5,15,5,30,"High-HV-15","","","",1000,10,"RL-2024","PRDSKU01",25,"2024-04-01","2024-12-31"];
-  const sampleByHeader = {};
-  fullHeaders.forEach((h,i) => { sampleByHeader[h] = fullSample[i]; });
+  // Sample values keyed by EXACT header name. Any header not listed gets "".
+  // Keyed (not positional) so adding/removing columns can never misalign the row.
+  const SAMPLE = {
+    "SKU": "ACRPRP1",
+    "Material Description": "Acrylic Baggage Tag Clear 2mm 85mmx55mm",
+    "UOM": "nos",
+    "Material Category Desc": "Acrylic Products",
+    "Category": "Acrylic Products",
+    "Major Category": "Acrylic",
+    "Classification": "Class A",
+    "Type": "Class A",
+    "Criticality": "Low",
+    "Season": "C&D",
+    "New Launch": "Yes",
+    "Cat Manager": "B-Print&Stationery",
+    "Reorder Type": "Hub/Req",
+    "BLR (B / blank)": "B",
+    "CHN (C / blank)": "C",
+    "HYD (H / blank)": "H",
+    "PUN (P / blank)": "P",
+    "NCR (D / blank)": "D",
+    "BLR Vendor (Name-LeadTime)": "Canvera-3",
+    "NCR Vendor": "CS",
+    "NCR Lead Time": 3,
+    "HYD Vendor": "BLR VM",
+    "HYD Lead Time": 3,
+    "CHN Vendor": "Vendor-X",
+    "CHN Lead Time": 3,
+    "Supplier MOQ": 144,
+    "Unit Price": 18.5,
+    "Consumption Per Month": 15,
+    "Buffer Lead Time": 5,
+    "Order Frequency": 30,
+    "Helper": "High-HV-15",
+    "BLR Vendor 2": "",
+    "NCR Vendor 2": "",
+    "CHN Vendor 2": "",
+    "HYD Vendor 2": "",
+    "BLR HUB Capacity": 1000,
+    "Distrbn MOQ": 10,
+    "Ratelist Name": "RL-2024",
+    "Product SKU": "PRDSKU01",
+    "Seasonal Consumption": 25,
+    "Launch Start Date": "2024-04-01",
+    "Season End Date": "2024-12-31",
+    "Launch End Date": "2024-12-31",
+  };
 
   // procurement gets the slimmed header set; everyone else gets the full one
   const role = (window._USER || {}).role;
-  const headers = (role === 'procurement') ? PROCUREMENT_TEMPLATE_HEADERS : fullHeaders;
-  const sample = headers.map(h => (h in sampleByHeader ? sampleByHeader[h] : ""));
+  const headers = (role === 'procurement') ? PROCUREMENT_TEMPLATE_HEADERS : TEMPLATE_HEADERS;
+  const sample = headers.map(h => (h in SAMPLE ? SAMPLE[h] : ""));
 
   const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
   const wb = XLSX.utils.book_new();
@@ -3694,6 +3721,34 @@ function _parseUpload(file) {
       if (crit && !VALID_CRITICALITY.includes(crit)) {
         errors.push(`Row ${rowNum} (${sku}): Criticality "${crit}" invalid — use V.High/High/Med/Low`);
       }
+
+      // ── Mandatory-field validation (procurement: every row must be complete) ──
+      // Only enforced when the file actually contains these columns, so admin's
+      // full template and the procurement template are both handled gracefully.
+      const _missing = [];
+      MANDATORY_UPLOAD_FIELDS.forEach(h => {
+        if (!(h in row)) return;                       // column not in this file → skip
+        const v = String(row[h] == null ? '' : row[h]).trim();
+        if (v === '') _missing.push(h);
+      });
+      if (_missing.length) {
+        errors.push(`Row ${rowNum} (${sku}): missing required field(s) — ${_missing.join(', ')}`);
+      }
+
+      // New Launch must be Yes/No if present
+      const newLaunchRaw = String(row['New Launch']==null?'':row['New Launch']).trim();
+      const newLaunch = newLaunchRaw.toLowerCase();
+      if (('New Launch' in row) && newLaunchRaw !== '' && !VALID_NEW_LAUNCH.includes(newLaunch)) {
+        errors.push(`Row ${rowNum} (${sku}): New Launch "${newLaunchRaw}" invalid — enter Yes or No`);
+      }
+      // Conditional: New Launch = Yes → Season End Date is mandatory
+      if (newLaunch === 'yes' && ('Season End Date' in row)) {
+        const seasonEnd = String(row['Season End Date']==null?'':row['Season End Date']).trim();
+        if (seasonEnd === '') {
+          errors.push(`Row ${rowNum} (${sku}): New Launch is "Yes" so Season End Date is required`);
+        }
+      }
+
       const isNew = !existingSkus.has(sku);
       if (isNew) {
         const consVal = String(row['Consumption Per Month']||'').trim();
@@ -3705,7 +3760,7 @@ function _parseUpload(file) {
       }
       const today = new Date().toISOString().slice(0,10);
       let launchStartVal = String(row['Launch Start Date']||'').trim();
-      const launchEndVal = String(row['Season End Date']||'').trim();
+      const launchEndVal = String(row['Launch End Date']||'').trim();
       // Launch Start: if blank, auto-fill today + warn
       if (!launchStartVal) {
         launchStartVal = today;
@@ -3714,7 +3769,7 @@ function _parseUpload(file) {
       }
       // Launch End: if blank, warn but allow (editable later in UI)
       if (!launchEndVal) {
-        warnings.push(`Row ${rowNum} (${sku}): Season End Date is blank — add it later in the tool`);
+        warnings.push(`Row ${rowNum} (${sku}): Launch End Date is blank — add it later in the tool`);
       }
       // Build per-collection field objects
       const matDoc = {}, vmDoc = {};
@@ -3748,7 +3803,9 @@ function _showUploadError(msg){
 function _renderUploadPreview(total, updates, news, errors, warnings) {
   warnings = warnings || [];
   const box = document.getElementById('upload-preview');
-  const canSave = total>0;
+  const hasErrors = errors.length > 0;
+  const canSave = total > 0 && !hasErrors;     // errors BLOCK the save
+  window._uploadHasErrors = hasErrors;          // guard read by _saveUpload
   box.innerHTML = `
     <div style="border-top:1px solid var(--border);padding-top:16px">
       <div style="font-weight:700;color:var(--text-2);font-size:12px;text-transform:uppercase;margin-bottom:10px">Preview</div>
@@ -3756,20 +3813,30 @@ function _renderUploadPreview(total, updates, news, errors, warnings) {
         <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">TOTAL ROWS</div><div style="font-size:22px;font-weight:700;color:var(--navy)">${total}</div></div>
         <div style="flex:1;background:var(--surface);border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">WILL UPDATE</div><div style="font-size:22px;font-weight:700;color:var(--orange)">${updates}</div></div>
         <div style="flex:1;background:${news?'#FFF4E0':'var(--surface)'};border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">NEW (no VM data)</div><div style="font-size:22px;font-weight:700;color:${news?'#854F0B':'var(--text-4)'}">${news}</div></div>
-        <div style="flex:1;background:${errors.length?'var(--red-soft)':'var(--surface)'};border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">ERRORS</div><div style="font-size:22px;font-weight:700;color:${errors.length?'var(--red)':'var(--text-4)'}">${errors.length}</div></div>
+        <div style="flex:1;background:${hasErrors?'var(--red-soft)':'var(--surface)'};border-radius:6px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">ERRORS</div><div style="font-size:22px;font-weight:700;color:${hasErrors?'var(--red)':'var(--text-4)'}">${errors.length}</div></div>
       </div>
-      ${errors.length?`<div style="background:var(--red-soft);color:var(--red);padding:10px 12px;border-radius:6px;font-size:12px;max-height:140px;overflow:auto;margin-bottom:10px">${errors.slice(0,50).map(e=>`<div>${e}</div>`).join('')}${errors.length>50?`<div>…and ${errors.length-50} more</div>`:''}</div>`:''}
+      ${hasErrors?`<div id="upload-error-box" style="background:var(--red-soft);color:var(--red);padding:12px 14px;border-radius:6px;font-size:12px;max-height:160px;overflow:auto;margin-bottom:10px"><b>⚠ ${errors.length} error${errors.length>1?'s':''} found — the whole file is blocked. Fix ${errors.length>1?'these':'this'} in your Excel and re-upload; nothing saves until all are cleared:</b>${errors.slice(0,50).map(e=>`<div style="margin-top:4px">• ${e}</div>`).join('')}${errors.length>50?`<div>…and ${errors.length-50} more</div>`:''}</div>`:''}
       ${warnings.length?`<div style="background:#FFF4E0;color:#854F0B;padding:10px 12px;border-radius:6px;font-size:12px;max-height:120px;overflow:auto;margin-bottom:14px"><b>Warnings (allowed):</b>${warnings.slice(0,30).map(w=>`<div>${w}</div>`).join('')}${warnings.length>30?`<div>…and ${warnings.length-30} more</div>`:''}</div>`:''}
       <div style="display:flex;gap:8px;align-items:center">
-        <button id="upload-confirm" class="btn primary" ${canSave?'':'disabled style="opacity:.5;cursor:not-allowed"'}>Confirm & Save ${total} rows</button>
+        <button id="upload-confirm" class="btn primary" ${canSave?'':'disabled style="opacity:.5;cursor:not-allowed"'}>${hasErrors?'Cannot save — fix errors first':`Confirm & Save ${total} rows`}</button>
         <span id="upload-msg" style="font-size:12px"></span>
       </div>
-      ${errors.length?`<div style="font-size:11px;color:var(--text-4);margin-top:8px">Rows with errors will still save the valid fields; fix Criticality values in your file and re-upload if needed.</div>`:''}
     </div>`;
 }
 
 async function _saveUpload() {
   if (!_uploadParsed || !_uploadParsed.length) return;
+  // Hard guard: never save while there are validation errors (defense in depth).
+  if (window._uploadHasErrors) {
+    const ebox = document.getElementById('upload-error-box');
+    if (ebox) {
+      ebox.style.animation = 'none';
+      void ebox.offsetWidth;            // reflow to restart the animation
+      ebox.style.animation = 'shake 0.4s';
+      ebox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    return;
+  }
   const msg = document.getElementById('upload-msg');
   const btn = document.getElementById('upload-confirm');
   btn.disabled = true; btn.style.opacity = '.5';
@@ -3795,7 +3862,7 @@ async function _saveUpload() {
     msg.style.color = 'var(--green)';
     msg.textContent = `Done — saved ${_uploadParsed.length} rows. Click Refresh data to see changes.`;
     // clear cache so next refresh shows new data
-    _clearCache();
+    try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
 
     // Notify Procurement — one summary email for the whole batch
     try {
@@ -3823,42 +3890,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.body.insertAdjacentHTML('beforeend', _uploadModalHTML());
 
   // ===== Permissions manager wiring =====
-  // Load the users list once (for the per-email dropdown). Each entry needs an email:
-  // prefer an `email` field on the doc; else use the doc id if it looks like an email.
-  let _permsUsersCache = null;
-  async function _getPermsUsers(){
-    if (_permsUsersCache) return _permsUsersCache;
-    try {
-      const all = await _fetchAll('users');
-      _permsUsersCache = all.map(u => {
-        const email = String(u.email || (String(u._id).includes('@') ? u._id : '')).toLowerCase().trim();
-        return { email, role: String(u.role||'').toLowerCase().trim(), region: u.region || '' };
-      }).filter(u => u.email);
-    } catch(e){ console.warn('could not load users for permissions:', e.message); _permsUsersCache = []; }
-    return _permsUsersCache;
-  }
-  // Fill the email dropdown with users whose role matches the selected role.
-  async function _populatePermsUsers(){
-    const role = document.getElementById('perms-role').value;
-    const sel = document.getElementById('perms-user');
-    const prev = sel.value;
-    const users = await _getPermsUsers();
-    const matching = users.filter(u => u.role === role).sort((a,b)=>a.email.localeCompare(b.email));
-    sel.innerHTML = '<option value="">All users with this role (role default)</option>' +
-      matching.map(u => `<option value="${u.email}">${u.email}${u.region?(' — '+u.region):''}</option>`).join('');
-    sel.value = (prev && matching.some(u=>u.email===prev)) ? prev : '';
-    const hint = document.getElementById('perms-user-hint');
-    if (hint) hint.textContent = matching.length
-      ? 'Pick an email to give that person access different from the role default. Leave on "role default" to set the baseline for everyone with this role.'
-      : 'No users with this role found in the "users" collection (or their docs have no email field).';
-  }
   function _renderPermsFields(){
     const role = document.getElementById('perms-role').value;
-    const email = document.getElementById('perms-user').value;
-    // per-email override if one is selected & exists; otherwise the role default
-    const allow = email
-      ? (USER_FIELD_OVERRIDES[email] || TEAM_EDITABLE_FIELDS[role] || new Set())
-      : (TEAM_EDITABLE_FIELDS[role] || new Set());
+    const allow = TEAM_EDITABLE_FIELDS[role] || new Set();
     const wrap = document.getElementById('perms-fields');
     wrap.innerHTML = FIELD_CATALOG.map(f => {
       const checked = allow.has(f.key) ? 'checked' : '';
@@ -3867,29 +3901,21 @@ document.addEventListener('DOMContentLoaded', () => {
         <span>${f.label}</span>
       </label>`;
     }).join('');
-    const rm = document.getElementById('perms-remove-override');
-    if (rm) rm.style.display = (email && USER_FIELD_OVERRIDES[email]) ? '' : 'none';
     _updatePermsCount();
   }
   function _updatePermsCount(){
     const n = document.querySelectorAll('#perms-fields .perm-cb:checked').length;
-    const email = document.getElementById('perms-user').value;
-    document.getElementById('perms-count').textContent = `(${n} selected · ${email ? 'for '+email : 'role default'})`;
-  }
-  async function _openPerms(){
-    if (!_isAdmin()) { alert('Permissions are admin-only.'); return; }
-    document.getElementById('perms-msg').textContent = '';
-    _permsUsersCache = null;            // re-read users each time the panel opens
-    await _populatePermsUsers();
-    _renderPermsFields();
-    document.getElementById('perms-modal').style.display = 'flex';
+    document.getElementById('perms-count').textContent = `(${n} selected)`;
   }
   const permsBtn = document.getElementById('perms-btn');
-  if (permsBtn) permsBtn.addEventListener('click', _openPerms);
+  if (permsBtn) permsBtn.addEventListener('click', () => {
+    if (!_isAdmin()) { alert('Permissions are admin-only.'); return; }
+    document.getElementById('perms-msg').textContent = '';
+    _renderPermsFields();
+    document.getElementById('perms-modal').style.display = 'flex';
+  });
   const roleSel = document.getElementById('perms-role');
-  if (roleSel) roleSel.addEventListener('change', async () => { await _populatePermsUsers(); _renderPermsFields(); });
-  const userSel = document.getElementById('perms-user');
-  if (userSel) userSel.addEventListener('change', _renderPermsFields);
+  if (roleSel) roleSel.addEventListener('change', _renderPermsFields);
   document.addEventListener('change', (e) => {
     if (e.target && e.target.classList && e.target.classList.contains('perm-cb')) _updatePermsCount();
   });
@@ -3905,44 +3931,18 @@ document.addEventListener('DOMContentLoaded', () => {
   if (saveBtn) saveBtn.addEventListener('click', async () => {
     if (!_isAdmin()) return;
     const role = document.getElementById('perms-role').value;
-    const email = document.getElementById('perms-user').value;
     const selected = Array.from(document.querySelectorAll('#perms-fields .perm-cb:checked')).map(cb => cb.dataset.key);
     const msg = document.getElementById('perms-msg');
     msg.style.color = '#6B7280'; msg.textContent = 'Saving…';
     try {
+      // update in-memory immediately
+      TEAM_EDITABLE_FIELDS[role] = new Set(selected);
+      // persist the whole permissions doc (merge so other roles are untouched)
       const { doc, setDoc } = window._fsApi;
-      if (email){
-        // per-user override (overrides this person's role default)
-        USER_FIELD_OVERRIDES[email] = new Set(selected);
-        await setDoc(doc(window._FS, 'config', 'user_permissions'), { [email]: selected }, { merge: true });
-        msg.style.color = '#16a34a'; msg.textContent = '✓ Saved for ' + email;
-        const rm = document.getElementById('perms-remove-override'); if (rm) rm.style.display = '';
-      } else {
-        // role default (merge so other roles are untouched)
-        TEAM_EDITABLE_FIELDS[role] = new Set(selected);
-        await setDoc(doc(window._FS, 'config', 'permissions'), { [role]: selected }, { merge: true });
-        msg.style.color = '#16a34a'; msg.textContent = '✓ Saved (role default for ' + role + ')';
-      }
+      await setDoc(doc(window._FS, 'config', 'permissions'), { [role]: selected }, { merge: true });
+      msg.style.color = '#16a34a'; msg.textContent = '✓ Saved';
     } catch(err){
       msg.style.color = '#c0392b'; msg.textContent = 'Save failed: ' + (err.message||err);
-    }
-  });
-  const rmBtn = document.getElementById('perms-remove-override');
-  if (rmBtn) rmBtn.addEventListener('click', async () => {
-    if (!_isAdmin()) return;
-    const email = document.getElementById('perms-user').value;
-    if (!email) return;
-    const msg = document.getElementById('perms-msg');
-    msg.style.color = '#6B7280'; msg.textContent = 'Removing override…';
-    try {
-      const { doc, setDoc, deleteField } = window._fsApi;
-      delete USER_FIELD_OVERRIDES[email];
-      await setDoc(doc(window._FS, 'config', 'user_permissions'), { [email]: deleteField() }, { merge: true });
-      msg.style.color = '#16a34a'; msg.textContent = '✓ Override removed — ' + email + ' now uses the role default';
-      rmBtn.style.display = 'none';
-      _renderPermsFields();
-    } catch(err){
-      msg.style.color = '#c0392b'; msg.textContent = 'Remove failed: ' + (err.message||err);
     }
   });
 
@@ -4164,7 +4164,7 @@ async function deleteSkuFlow(sku){
     // update local state + UI
     DATA = DATA.filter(r => r.sku !== sku);
     renderTable();
-    _clearCache();
+    try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
     // email notification (same channel as edits)
     try { notifyProcurement('Item Deleted', `SKU ${sku} was deleted by ${(window._USER||{}).email||'admin'}${desc ? ' — ' + (item.description||'') : ''}`); } catch(e){}
     alert(`✓ ${sku} deleted.`);
@@ -4351,7 +4351,7 @@ async function _saveAdjUpload() {
     }
 
     renderTable();   // table reflects new adjusted counts immediately
-    _clearCache();
+    try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
 
     if (failed.length) {
       msg.style.color = 'var(--red)';
@@ -4409,20 +4409,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ── MANUAL REFRESH (clears daily cache, re-reads Firestore once) ── */
 (function(){
-  async function updateCacheStatus(){
+  function updateCacheStatus(){
     try {
+      const raw = localStorage.getItem('printo_mat_cache_v1');
       const el = document.getElementById('cache-status');
       if (!el) return;
-      const obj = await _idbGet(CACHE_KEY);
-      el.textContent = obj ? ('Data as of ' + (obj.date || 'today')) : '';
+      if (raw) {
+        const obj = JSON.parse(raw);
+        el.textContent = 'Data as of ' + (obj.date || 'today');
+      } else { el.textContent = ''; }
     } catch(e){}
   }
   document.addEventListener('DOMContentLoaded', () => {
     updateCacheStatus();
     const btn = document.getElementById('refresh-data-btn');
-    if (btn) btn.addEventListener('click', async () => {
+    if (btn) btn.addEventListener('click', () => {
       if (confirm('Reload the latest data from the database? This uses database reads.')) {
-        try { await _clearCache(); } catch(e){}
+        try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
         location.reload();
       }
     });
