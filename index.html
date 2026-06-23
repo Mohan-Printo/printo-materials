@@ -2914,6 +2914,18 @@ const MODAL_FORMS = {
       {name:'season',label:'Season',type:'text',half:true},
       {name:'launch_start',label:'Launch Start Date',type:'date',half:true},
       {name:'season_end',label:'Season End Date',type:'date',half:true},
+      // --- Cities (B/C/H/P/D): mark which cities stock this item ---
+      {name:'blr',label:'BLR (B) — in city?',type:'select',opts:['B','Discontinued'],half:true},
+      {name:'chn',label:'CHN (C) — in city?',type:'select',opts:['C','Discontinued'],half:true},
+      {name:'hyd',label:'HYD (H) — in city?',type:'select',opts:['H','Discontinued'],half:true},
+      {name:'pun',label:'PUN (P) — in city?',type:'select',opts:['P','Discontinued'],half:true},
+      {name:'ncr',label:'NCR (D) — in city?',type:'select',opts:['D','Discontinued'],half:true},
+      // --- City-wise lead times (days). NCR/HYD/CHN existed; BLR/PUN are new fields ---
+      {name:'blr_lead_time',label:'BLR Lead Time (days)',type:'number',half:true},
+      {name:'chn_lead_time',label:'CHN Lead Time (days)',type:'number',half:true},
+      {name:'hyd_lead_time',label:'HYD Lead Time (days)',type:'number',half:true},
+      {name:'pun_lead_time',label:'PUN Lead Time (days)',type:'number',half:true},
+      {name:'ncr_lead_time',label:'NCR Lead Time (days)',type:'number',half:true},
     ]
   },
   vm_params: {
@@ -2921,7 +2933,7 @@ const MODAL_FORMS = {
     fields: [
       {name:'sku',label:'SKU',type:'text',required:true,half:false},
       {name:'avg_unit_price',label:'Avg Unit Price',type:'number',half:true},
-      {name:'cnsump_value',label:'Consumption Value',type:'number',half:true},
+      // {name:'cnsump_value',label:'Consumption Value',type:'number',half:true}, // HIDDEN from UI by request — still saved/used in DB; un-comment to show again
       {name:'min_qty',label:'Min Qty',type:'number',half:true},
       {name:'max_qty',label:'Max Qty',type:'number',half:true},
       {name:'min_val',label:'Min Value',type:'number',half:true},
