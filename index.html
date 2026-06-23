@@ -4223,25 +4223,36 @@ document.addEventListener('DOMContentLoaded', () => {
    ══════════════════════════════════════════════════════════════ */
 async function deleteSkuFlow(sku){
   if ((window._USER||{}).role !== 'admin') { alert('Deleting items is admin-only.'); return; }
-  const item = DATA.find(r => r.sku === sku);
+  // Find ALL rows with this SKU (could be duplicates with different Firestore doc IDs)
+  const items = DATA.filter(r => r.sku === sku);
+  const item = items[0];
   const desc = item && item.description ? `\n${item.description}` : '';
-  const typed = prompt(`⚠ You are about to PERMANENTLY delete:\n\nSKU: ${sku}${desc}\n\nThis removes it from materials, VM classification, consumption and live stock. This cannot be undone.\n\nType DELETE (in capitals) to confirm:`);
+  const dupeNote = items.length > 1 ? `\n\n⚠ Found ${items.length} duplicate entries for this SKU — all will be deleted.` : '';
+  const typed = prompt(`⚠ You are about to PERMANENTLY delete:\n\nSKU: ${sku}${desc}${dupeNote}\n\nThis removes it from materials, VM classification, consumption and live stock. This cannot be undone.\n\nType DELETE (in capitals) to confirm:`);
   if (typed === null) return;                       // cancelled
   if (typed.trim() !== 'DELETE') { alert('Not deleted — you must type DELETE exactly.'); return; }
   try {
     const { doc, deleteDoc } = window._fsApi;
-    const colls = ['materials','vm_classification','consumption_2025','live_stock'];
-    await Promise.all(colls.map(c => deleteDoc(doc(window._FS, c, sku)).catch(e => {
-      // missing doc in a collection is fine; rethrow real errors
+    // Delete the materials doc by its actual Firestore _id (not assumed to equal sku)
+    // This handles both old auto-ID docs and new sku-as-id docs correctly.
+    const matDeletes = items.map(r =>
+      deleteDoc(doc(window._FS, 'materials', r._id)).catch(e => {
+        if (!/not.?found/i.test(e.message||'')) throw e;
+      })
+    );
+    // For other collections, the doc ID IS the sku (they were always setDoc'd by sku)
+    const otherColls = ['vm_classification','consumption_2025','live_stock'];
+    const otherDeletes = otherColls.map(c => deleteDoc(doc(window._FS, c, sku)).catch(e => {
       if (!/not.?found/i.test(e.message||'')) throw e;
-    })));
+    }));
+    await Promise.all([...matDeletes, ...otherDeletes]);
     // update local state + UI
     DATA = DATA.filter(r => r.sku !== sku);
     renderTable();
     try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
     // email notification (same channel as edits)
     try { notifyProcurement('Item Deleted', `SKU ${sku} was deleted by ${(window._USER||{}).email||'admin'}${desc ? ' — ' + (item.description||'') : ''}`); } catch(e){}
-    alert(`✓ ${sku} deleted.`);
+    alert(`✓ ${sku} deleted${items.length > 1 ? ` (${items.length} duplicate entries removed)` : ''}.`);
   } catch(err){
     alert('Delete failed: ' + (err.message||err));
   }
