@@ -1292,6 +1292,7 @@ function regionMatrixHTML(r){
         <div class="region-col-flag ${isOn?"flag-on":isDisc?"flag-disc":""}">${isOn?"Stocked":isDisc?"Discontinued":"Not stocked"}</div>
       </div>
       <dl>
+        <div><dt>Stock</dt><dd ${info.stock==null?'class="empty"':""}>${info.stock!=null?`<span class="num-val">${fmtNum(info.stock)}</span> ${r.uom||""}`:"—"}${info.stock_synced_at?`<span style="display:block;font-size:10px;color:var(--text-4)">as of ${new Date(info.stock_synced_at).toLocaleDateString()}</span>`:""}</dd></div>
         <div><dt>Vendor</dt><dd ${!info.vendor?'class="empty"':""}>${info.vendor==="CS"?'<span class="cs-tag">CS</span>':(info.vendor||"Not assigned")}</dd></div>
         <div><dt>Vendor 2</dt><dd ${!info.vendor_alt?'class="empty"':""}>${info.vendor_alt||"—"}</dd></div>
         <div><dt>Lead Time</dt><dd ${info.lead_time==null?'class="empty"':""}>${info.lead_time!=null?`<span class="num-val">${info.lead_time}</span> days`:"—"}</dd></div>
@@ -1309,7 +1310,9 @@ function rowHTML(r,idx){
   let cells;
   if(isSpecificRegion()){
     const info=r.regions[state.region]||{};
-    cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="vendor-cell">${vendorCell(info.vendor,info.vendor_alt)}</td><td class="${info.lead_time==null?"num muted":"num"}">${info.lead_time!=null?info.lead_time+' <span class="unit">d</span>':"—"}</td><td class="reorder-cell">${reorderPill(info.str_reorder)}${info.ordering_frequency!=null?`<span class="freq">every ${info.ordering_frequency}d</span>`:""}</td><td class="${info.consumption_3mo==null?"num muted":"num"}">${fmtConsumption(info.consumption_3mo)} ${info.consumption_3mo!=null&&r.uom?`<span class="unit">${r.uom}</span>`:""}</td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td>${reorderPill(info.str_reorder)}</td>`;
+    const _regStockVal = (info.stock!=null) ? info.stock : (state.region==='BLR' ? r.closing_stock : null);
+    const _regStockCls = _regStockVal==null ? "num muted" : "num";
+    cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="vendor-cell">${vendorCell(info.vendor,info.vendor_alt)}</td><td class="${info.lead_time==null?"num muted":"num"}">${info.lead_time!=null?info.lead_time+' <span class="unit">d</span>':"—"}</td><td class="reorder-cell">${reorderPill(info.str_reorder)}${info.ordering_frequency!=null?`<span class="freq">every ${info.ordering_frequency}d</span>`:""}</td><td class="${info.consumption_3mo==null?"num muted":"num"}">${fmtConsumption(info.consumption_3mo)} ${info.consumption_3mo!=null&&r.uom?`<span class="unit">${r.uom}</span>`:""}</td><td>${critPill(r.criticality)}</td><td class="${_regStockCls}">${fmtNum(_regStockVal)}</td><td>${reorderPill(info.str_reorder)}</td>`;
   }else{
     const cities=REGIONS.map(c=>{const v=r[c.flag];if(v==="Discontinued")return`<span class="city discon" title="Discontinued">${c.label}</span>`;if(v)return`<span class="city on" title="${c.name}">${c.label}</span>`;return`<span class="city" title="Not in ${c.name}">${c.label}</span>`}).join("");
     const adjCls=r.adjusted_count==null?"num muted":"num";const adjBadge=r.adjustment&&r.adjustment!=0?`<span style="font-size:10px;color:var(--orange);display:block">${r.adjustment>0?"+":""}${r.adjustment}</span>`:"";cells=`<td class="sku">${r.sku}</td><td class="desc">${r.description}</td><td class="cat-cell"><span class="major">${r.major_category}</span>${r.category}</td><td><div class="cities">${cities}</div></td><td>${critPill(r.criticality)}</td><td class="${stockCls}">${fmtNum(r.closing_stock)}</td><td class="${r.consumption_month==null?"num muted":"num"}">${fmtConsumption(r.consumption_month)} ${r.consumption_month!=null&&r.uom?`<span class="unit">${r.uom}/mo</span>`:""}</td><td>${reorderPill(r.str_reorder_type)}</td><td class="${adjCls}">${r.adjusted_count!=null?fmtNum(r.adjusted_count):"—"}${adjBadge}</td><td><button class="adjust-btn" onclick="event.stopPropagation();openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">Adjust</button></td>`;
@@ -2084,6 +2087,21 @@ async function _bootApp() {
       const adjustment   = parseFloat(ls.adjustment) || 0;
       const adjustedCount = computeAdjusted(closingStock, adjustment);
       const syncedAt     = ls.synced_at || null;
+      // Per-region stock written by the region Google-Sheet sync scripts.
+      // BLR uses closing_stock (from VM); HYD/CHN/NCR have their own sub-fields.
+      const _regStock = (v) => (v !== null && v !== undefined && v !== '') ? parseFloat(v) : null;
+      const regionStock = {
+        BLR: closingStock,
+        HYD: _regStock(ls.hyd_stock),
+        CHN: _regStock(ls.chn_stock),
+        NCR: _regStock(ls.ncr_stock),
+        PUN: _regStock(ls.pun_stock)   // reserved for future
+      };
+      const regionStockSyncedAt = {
+        HYD: ls.hyd_stock_synced_at || null,
+        CHN: ls.chn_stock_synced_at || null,
+        NCR: ls.ncr_stock_synced_at || null
+      };
 
       // --- VENDORS / LEAD TIME ---
       // BLR: combined "Name-LeadTime" — keep raw for display, parse lead time
@@ -2210,12 +2228,13 @@ async function _bootApp() {
 
         // regions — mapped to v2 field names
         regions: {
-          BLR: { vendor: blrVendorRaw, vendor_alt: m.blr_v2||null, lead_time: blrParsed.lead, str_reorder: m.str_reorder_type||null, ordering_frequency: (m.blr_ordering_frequency!=null&&m.blr_ordering_frequency!==''?parseFloat(m.blr_ordering_frequency):(vm.ord_freq!=null&&vm.ord_freq!==''?parseFloat(vm.ord_freq):null)), consumption_3mo: parseFloat(c.blr_3)||0 },
-          CHN: { vendor: m.chn_v1||null, vendor_alt: m.chn_v2||null, lead_time: m.chn_lead_time!=null?parseFloat(m.chn_lead_time):null, str_reorder: m.chn_str_reorder||null, ordering_frequency: m.chn_ordering_frequency||null, consumption_3mo: parseFloat(c.chn_3)||0 },
-          HYD: { vendor: m.hyd_v1||null, vendor_alt: null, lead_time: m.hyd_lead_time!=null?parseFloat(m.hyd_lead_time):null, str_reorder: m.hyd_str_reorder||null, ordering_frequency: m.hyd_ordering_frequency||null, consumption_3mo: parseFloat(c.hyd_3)||0 },
-          NCR: { vendor: m.ncr_v1||null, vendor_alt: m.ncr_v2||null, lead_time: m.ncr_lead_time!=null?parseFloat(m.ncr_lead_time):null, str_reorder: m.ncr_str_reorder||null, ordering_frequency: m.ncr_ordering_frequency||null, consumption_3mo: parseFloat(c.ncr_3)||0 },
-          PUN: { vendor: null, vendor_alt: null, lead_time: null, str_reorder: null, ordering_frequency: null, consumption_3mo: parseFloat(c.pun_3)||0 }
+          BLR: { vendor: blrVendorRaw, vendor_alt: m.blr_v2||null, lead_time: blrParsed.lead, str_reorder: m.str_reorder_type||null, ordering_frequency: (m.blr_ordering_frequency!=null&&m.blr_ordering_frequency!==''?parseFloat(m.blr_ordering_frequency):(vm.ord_freq!=null&&vm.ord_freq!==''?parseFloat(vm.ord_freq):null)), consumption_3mo: parseFloat(c.blr_3)||0, stock: regionStock.BLR, stock_synced_at: syncedAt },
+          CHN: { vendor: m.chn_v1||null, vendor_alt: m.chn_v2||null, lead_time: m.chn_lead_time!=null?parseFloat(m.chn_lead_time):null, str_reorder: m.chn_str_reorder||null, ordering_frequency: m.chn_ordering_frequency||null, consumption_3mo: parseFloat(c.chn_3)||0, stock: regionStock.CHN, stock_synced_at: regionStockSyncedAt.CHN },
+          HYD: { vendor: m.hyd_v1||null, vendor_alt: null, lead_time: m.hyd_lead_time!=null?parseFloat(m.hyd_lead_time):null, str_reorder: m.hyd_str_reorder||null, ordering_frequency: m.hyd_ordering_frequency||null, consumption_3mo: parseFloat(c.hyd_3)||0, stock: regionStock.HYD, stock_synced_at: regionStockSyncedAt.HYD },
+          NCR: { vendor: m.ncr_v1||null, vendor_alt: m.ncr_v2||null, lead_time: m.ncr_lead_time!=null?parseFloat(m.ncr_lead_time):null, str_reorder: m.ncr_str_reorder||null, ordering_frequency: m.ncr_ordering_frequency||null, consumption_3mo: parseFloat(c.ncr_3)||0, stock: regionStock.NCR, stock_synced_at: regionStockSyncedAt.NCR },
+          PUN: { vendor: null, vendor_alt: null, lead_time: null, str_reorder: null, ordering_frequency: null, consumption_3mo: parseFloat(c.pun_3)||0, stock: regionStock.PUN, stock_synced_at: null }
         },
+        _region_stock: regionStock,
         grand_total_consumption: parseFloat(c.grand_total) || 0
       };
     });
@@ -4618,6 +4637,7 @@ function _redrawOverviewTable(regionKey) {
   tbody.innerHTML = filtered.map(r => {
     const info = r.regions?.[regionKey] || {};
     const reorderVal = info.str_reorder || r.str_reorder_type;
+    const _ovStock = (info.stock!=null) ? info.stock : (regionKey==='BLR' ? r.closing_stock : null);
     const cities = REGIONS.map(c => {
       const v = r[c.flag];
       if (v === 'Discontinued') return '<span class="city discon">' + c.label + '</span>';
@@ -4632,7 +4652,7 @@ function _redrawOverviewTable(regionKey) {
       '<td style="font-size:11.5px">' + (r.major_category||'') + (r.category ? ' / ' + r.category : '') + '</td>' +
       '<td><div class="cities" style="display:flex;gap:2px">' + cities + '</div></td>' +
       '<td>' + critPill(r.criticality) + '</td>' +
-      '<td class="num' + (r.closing_stock==null?' muted':'') + '">' + fmtNum(r.closing_stock) + '</td>' +
+      '<td class="num' + (_ovStock==null?' muted':'') + '">' + fmtNum(_ovStock) + '</td>' +
       '<td class="num">' + fmtConsumption(r.consumption_month) + '</td>' +
       '<td>' + reorderPill(reorderVal) + '</td>' +
       '<td class="num">' + fmtNum(r.min_qty) + '</td>' +
@@ -4668,8 +4688,9 @@ document.body.addEventListener('click', function(e) {
     const rows = filtered.map(r => {
       const info = r.regions?.[regionKey] || {};
       const reorderVal = info.str_reorder || r.str_reorder_type;
+      const _csvStock = (info.stock!=null) ? info.stock : (regionKey==='BLR' ? (r.closing_stock||0) : '');
       const cityList = [r.blr?'BLR':'',r.chn?'CHN':'',r.hyd?'HYD':'',r.pun?'PUN':'',r.ncr?'NCR':''].filter(Boolean).join('/');
-      return [r.sku,r.description,r.uom||'',r.major_category||'',r.category||'',cityList,r.criticality||'',r.closing_stock||0,r.consumption_month||0,reorderVal||'',r.min_qty||0,r.max_qty||0,info.lead_time||''];
+      return [r.sku,r.description,r.uom||'',r.major_category||'',r.category||'',cityList,r.criticality||'',_csvStock,r.consumption_month||0,reorderVal||'',r.min_qty||0,r.max_qty||0,info.lead_time||''];
     });
     const csv = [headers, ...rows].map(row => 
       row.map(v => '"' + String(v||'').replace(/"/g,'""') + '"').join(',')
