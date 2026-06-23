@@ -1339,7 +1339,7 @@ function rowHTML(r,idx){
     <div style="margin-top:12px;display:flex;gap:8px">
       <button class="adjust-btn" onclick="openAdjustModal('${r.sku}')" style="background:var(--navy);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Adjust Stock</button>
       <button class="edit-item-btn" onclick="openEditModal('${r.sku}')" style="background:var(--orange);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">Edit Item</button>
-      ${(window._USER||{}).role==='admin' ? `<button class="delete-item-btn" onclick="deleteSkuFlow('${r.sku}')" style="background:var(--red);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;margin-left:auto">🗑 Delete SKU</button>` : ''}
+      ${(window._USER||{}).role==='admin' ? `<button class="delete-item-btn" onclick="deleteSkuFlow('${r._id}')" style="background:var(--red);color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;margin-left:auto">🗑 Delete SKU</button>` : ''}
     </div></div>
     <div class="detail-section"><h5>Stock Parameters</h5>
     <dl class="detail-grid">
@@ -3661,14 +3661,27 @@ const VALID_CRITICALITY = ["V.High","High","Med","Low"];
 
 // Fields that MUST be filled on every procurement upload row.
 // Excluded: the 5 region flags and the 4 Vendor-2 columns, plus Season End Date
-// (which is conditionally required only when New Launch = Yes — handled separately).
+// (conditionally required only when New Launch = Yes — handled separately).
+// Region vendor + lead-time fields are NOT here — they are conditionally required
+// per row, only when that region's city flag is set (see REGION_CONDITIONAL_FIELDS).
 const MANDATORY_UPLOAD_FIELDS = [
   "Material Description","UOM","Material Category Desc","Category","Major Category",
   "Classification","Type","Season","New Launch","Reorder Type",
-  "BLR Vendor (Name-LeadTime)","NCR Vendor","HYD Vendor","CHN Vendor",
-  "NCR Lead Time","HYD Lead Time","CHN Lead Time",
   "Supplier MOQ","Unit Price","Consumption Per Month",
   "BLR HUB Capacity","Distrbn MOQ","Seasonal Consumption","Launch Start Date",
+];
+
+// Per-region conditional requirement: if the city flag column has a value (the city
+// stocks this item), then that region's vendor (and lead time) become required for the row.
+// BLR's lead time is embedded in the vendor string ("Name-LeadTime"), so BLR has no
+// separate lead-time column to require. PUN currently has no vendor/lead columns in the
+// template, so it only needs its flag (no extra required fields).
+const REGION_CONDITIONAL_FIELDS = [
+  { flag: "BLR (B / blank)", require: ["BLR Vendor (Name-LeadTime)"] },
+  { flag: "CHN (C / blank)", require: ["CHN Vendor","CHN Lead Time"] },
+  { flag: "HYD (H / blank)", require: ["HYD Vendor","HYD Lead Time"] },
+  { flag: "NCR (D / blank)", require: ["NCR Vendor","NCR Lead Time"] },
+  { flag: "PUN (P / blank)", require: [] },
 ];
 const VALID_NEW_LAUNCH = ["yes","no"];
 
@@ -3808,6 +3821,26 @@ function _parseUpload(file) {
       });
       if (_missing.length) {
         errors.push(`Row ${rowNum} (${sku}): missing required field(s) — ${_missing.join(', ')}`);
+      }
+
+      // ── Per-region conditional validation ──
+      // For each region, if its city-flag column is set for this row (and isn't
+      // "Discontinued"), require that region's vendor (+ lead time). If the flag is
+      // blank, that region's fields are optional — no error. Only enforced when the
+      // relevant columns actually exist in the uploaded file.
+      const _regionMissing = [];
+      REGION_CONDITIONAL_FIELDS.forEach(reg => {
+        if (!(reg.flag in row)) return;                 // flag column not in file → skip
+        const flagVal = String(row[reg.flag] == null ? '' : row[reg.flag]).trim();
+        if (flagVal === '' || /^discontinued$/i.test(flagVal)) return;  // not stocked → optional
+        reg.require.forEach(h => {
+          if (!(h in row)) return;                       // that column not in file → skip
+          const v = String(row[h] == null ? '' : row[h]).trim();
+          if (v === '') _regionMissing.push(h);
+        });
+      });
+      if (_regionMissing.length) {
+        errors.push(`Row ${rowNum} (${sku}): region is marked active so these are required — ${_regionMissing.join(', ')}`);
       }
 
       // New Launch must be Yes/No if present
@@ -4222,41 +4255,47 @@ document.addEventListener('DOMContentLoaded', () => {
    consumption_2025, live_stock. The stock_adjustments audit log is
    KEPT on purpose (audit trail should survive item deletion).
    ══════════════════════════════════════════════════════════════ */
-async function deleteSkuFlow(sku){
+async function deleteSkuFlow(docId){
   if ((window._USER||{}).role !== 'admin') { alert('Deleting items is admin-only.'); return; }
-  // Find ALL rows with this SKU (could be duplicates with different Firestore doc IDs)
-  const items = DATA.filter(r => r.sku === sku);
-  const item = items[0];
-  const desc = item && item.description ? `\n${item.description}` : '';
-  const dupeNote = items.length > 1 ? `\n\n⚠ Found ${items.length} duplicate entries for this SKU — all will be deleted.` : '';
-  const typed = prompt(`⚠ You are about to PERMANENTLY delete:\n\nSKU: ${sku}${desc}${dupeNote}\n\nThis removes it from materials, VM classification, consumption and live stock. This cannot be undone.\n\nType DELETE (in capitals) to confirm:`);
+  // Identify the single row by its Firestore document _id (not by SKU),
+  // so duplicate-SKU rows are deleted one at a time.
+  const item = DATA.find(r => r._id === docId);
+  if (!item) { alert('Could not find this item to delete (try Refresh data).'); return; }
+  const sku = item.sku;
+  const desc = item.description ? `\n${item.description}` : '';
+  // Is this the LAST remaining row with this SKU? Only then remove the
+  // SKU-keyed shared collections (VM / consumption / live stock).
+  const sameSkuCount = DATA.filter(r => r.sku === sku).length;
+  const isLastForSku = sameSkuCount <= 1;
+  const sharedNote = isLastForSku
+    ? '\n\nThis is the only entry for this SKU, so VM classification, consumption and live stock will also be removed.'
+    : `\n\nNote: ${sameSkuCount - 1} other entr${sameSkuCount-1===1?'y':'ies'} with this SKU will be kept, so shared VM/consumption/stock data is NOT removed.`;
+  const typed = prompt(`⚠ You are about to PERMANENTLY delete THIS ONE entry:\n\nSKU: ${sku}${desc}${sharedNote}\n\nThis cannot be undone.\n\nType DELETE (in capitals) to confirm:`);
   if (typed === null) return;                       // cancelled
   if (typed.trim() !== 'DELETE') { alert('Not deleted — you must type DELETE exactly.'); return; }
   try {
     const { doc, deleteDoc } = window._fsApi;
-    // Delete the materials doc by its actual Firestore _id (not assumed to equal sku)
-    // This handles both old auto-ID docs and new sku-as-id docs correctly.
-    const matDeletes = items
-      .map(r => r._id || sku)          // fall back to sku if _id missing
-      .filter(Boolean)                 // drop any empty ids (prevents doc() crash)
-      .map(docId =>
-        deleteDoc(doc(window._FS, 'materials', docId)).catch(e => {
-          if (!/not.?found/i.test(e.message||'')) throw e;
-        })
-      );
-    // For other collections, the doc ID IS the sku (they were always setDoc'd by sku)
-    const otherColls = ['vm_classification','consumption_2025','live_stock'];
-    const otherDeletes = otherColls.map(c => deleteDoc(doc(window._FS, c, sku)).catch(e => {
+    const deletes = [];
+    // Always delete just this one materials document, by its _id
+    deletes.push(deleteDoc(doc(window._FS, 'materials', docId)).catch(e => {
       if (!/not.?found/i.test(e.message||'')) throw e;
     }));
-    await Promise.all([...matDeletes, ...otherDeletes]);
-    // update local state + UI
-    DATA = DATA.filter(r => r.sku !== sku);
+    // Only clear the SKU-keyed shared collections when no duplicate remains
+    if (isLastForSku) {
+      ['vm_classification','consumption_2025','live_stock'].forEach(c => {
+        deletes.push(deleteDoc(doc(window._FS, c, sku)).catch(e => {
+          if (!/not.?found/i.test(e.message||'')) throw e;
+        }));
+      });
+    }
+    await Promise.all(deletes);
+    // update local state + UI — remove only the one row by _id
+    DATA = DATA.filter(r => r._id !== docId);
     renderTable();
     try { localStorage.removeItem('printo_mat_cache_v1'); } catch(e){}
     // email notification (same channel as edits)
-    try { notifyProcurement('Item Deleted', `SKU ${sku} was deleted by ${(window._USER||{}).email||'admin'}${desc ? ' — ' + (item.description||'') : ''}`); } catch(e){}
-    alert(`✓ ${sku} deleted${items.length > 1 ? ` (${items.length} duplicate entries removed)` : ''}.`);
+    try { notifyProcurement('Item Deleted', `SKU ${sku} (1 entry) was deleted by ${(window._USER||{}).email||'admin'}${desc ? ' — ' + (item.description||'') : ''}`); } catch(e){}
+    alert(`✓ One entry for ${sku} deleted.`);
   } catch(err){
     alert('Delete failed: ' + (err.message||err));
   }
@@ -4634,3 +4673,4 @@ renderRegionDashboard = function(regionKey) {
 
 
 </script>
+s
