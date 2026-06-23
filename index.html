@@ -2138,6 +2138,7 @@ async function _bootApp() {
       }
 
       return {
+        _id: m._id,
         sku: m.sku || '',
         description: m.material_description || '',
         uom: m.uom || '',
@@ -4235,11 +4236,14 @@ async function deleteSkuFlow(sku){
     const { doc, deleteDoc } = window._fsApi;
     // Delete the materials doc by its actual Firestore _id (not assumed to equal sku)
     // This handles both old auto-ID docs and new sku-as-id docs correctly.
-    const matDeletes = items.map(r =>
-      deleteDoc(doc(window._FS, 'materials', r._id)).catch(e => {
-        if (!/not.?found/i.test(e.message||'')) throw e;
-      })
-    );
+    const matDeletes = items
+      .map(r => r._id || sku)          // fall back to sku if _id missing
+      .filter(Boolean)                 // drop any empty ids (prevents doc() crash)
+      .map(docId =>
+        deleteDoc(doc(window._FS, 'materials', docId)).catch(e => {
+          if (!/not.?found/i.test(e.message||'')) throw e;
+        })
+      );
     // For other collections, the doc ID IS the sku (they were always setDoc'd by sku)
     const otherColls = ['vm_classification','consumption_2025','live_stock'];
     const otherDeletes = otherColls.map(c => deleteDoc(doc(window._FS, c, sku)).catch(e => {
