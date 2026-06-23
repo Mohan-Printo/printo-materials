@@ -348,6 +348,8 @@
 
   /* ===== KPI STRIP ===== */
   .kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  /* Stats bar hidden on the main table view by request — remove this rule to show it again */
+  #kpi-strip-table{display:none}
   .kpi-card{
     background:var(--bg);border:1.5px solid var(--border);border-radius:8px;
     padding:16px 18px;display:flex;flex-direction:column;gap:6px;
@@ -3073,7 +3075,28 @@ document.getElementById('modal-save').addEventListener('click', async ()=>{
   }
   const saveBtn = document.getElementById('modal-save');
   saveBtn.textContent = 'Saving...'; saveBtn.disabled = true;
-  let error=null; try{ const {collection,addDoc}=window._fsApi; await addDoc(collection(window._FS, form.table), record); }catch(ex){ error=ex; }
+  let error=null;
+  try {
+    const {collection, addDoc, doc, setDoc} = window._fsApi;
+    // For 'material' tab: use SKU as doc ID so re-saving same SKU overwrites (no duplicates).
+    // Also restructure flat city lead-time fields into nested regions.X.lead_time format.
+    if (_curTab === 'material' && record.sku) {
+      const CITY_KEYS = ['BLR','CHN','HYD','PUN','NCR'];
+      const regionData = {};
+      CITY_KEYS.forEach(city => {
+        const ltField = city.toLowerCase() + '_lead_time';
+        const ltVal = record[ltField];
+        if (ltVal != null) {
+          regionData[city] = { lead_time: ltVal };
+          delete record[ltField];
+        }
+      });
+      if (Object.keys(regionData).length) record.regions = regionData;
+      await setDoc(doc(window._FS, form.table, record.sku), record, { merge: true });
+    } else {
+      await addDoc(collection(window._FS, form.table), record);
+    }
+  } catch(ex) { error=ex; }
   saveBtn.textContent = 'Save to database'; saveBtn.disabled = false;
   if(error){
     msg.textContent = 'Error: ' + error.message; msg.className = 'form-msg err';
