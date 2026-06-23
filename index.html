@@ -1328,10 +1328,9 @@ function rowHTML(r,idx){
       <div class="detail-item"><dt>Category Manager</dt><dd>${r.cat_manager||"—"}</dd></div>
       <div class="detail-item"><dt>Season</dt><dd>${r.season||"—"}</dd></div>
       <div class="detail-item"><dt>Seasonal Consumption</dt><dd>${r.seasonal_consumption!=null?fmtNum(r.seasonal_consumption):"—"}</dd></div>
-      <div class="detail-item"><dt>Launch Start Date</dt><dd>${r.launch_start||"—"}</dd></div>
+      <div class="detail-item"><dt>Season Start Date</dt><dd>${r.launch_start||"—"}</dd></div>
       <div class="detail-item"><dt>New Launch</dt><dd>${r.new_launch||"—"}</dd></div>
       <div class="detail-item"><dt>Season End Date</dt><dd>${r.season_end||"—"}</dd></div>
-      <div class="detail-item"><dt>Launch End Date</dt><dd>${r.launch_end||"—"}</dd></div>
       <div class="detail-item"><dt>Ratelist Name</dt><dd>${r.ratelist_name||"—"}</dd></div>
       <div class="detail-item"><dt>Product SKU</dt><dd>${r.product_sku||"—"}</dd></div>
       <div class="detail-item"><dt>Distrbn MOQ</dt><dd>${r.min_distrbn_qty!=null?fmtNum(r.min_distrbn_qty):"—"}</dd></div>
@@ -1350,7 +1349,6 @@ function rowHTML(r,idx){
       <div class="detail-item"><dt>Max Qty</dt><dd>${fmtNum(r.max_qty)} ${r.uom||""}</dd></div>
       <div class="detail-item"><dt>Min Value <span style="color:var(--orange);font-size:10px">calc</span></dt><dd>${(r.min_qty!=null&&r.unit_price!=null)?fmtPrice(r.min_qty*r.unit_price):"—"} <span style="font-size:11px;color:var(--text-4)">(Min Qty × Unit Price)</span></dd></div>
       <div class="detail-item"><dt>Max Value <span style="color:var(--orange);font-size:10px">calc</span></dt><dd>${(r.max_qty!=null&&r.unit_price!=null)?fmtPrice(r.max_qty*r.unit_price):"—"} <span style="font-size:11px;color:var(--text-4)">(Max Qty × Unit Price)</span></dd></div>
-      <div class="detail-item"><dt>Ord Frequency</dt><dd>${r._ord_freq||30} days</dd></div>
       <div class="detail-item"><dt>Uncertainty Buffer (Min)</dt><dd>${r._buf_min!=null?(r._buf_min*100).toFixed(0)+"%":"—"} <span style="font-size:11px;color:var(--text-4)">from VenMstr</span></dd></div>
       <div class="detail-item"><dt>Uncertainty Buffer (Max)</dt><dd>${r._buf_max!=null?(r._buf_max*100).toFixed(0)+"%":"—"} <span style="font-size:11px;color:var(--text-4)">from VenMstr</span></dd></div>
     </dl></div>
@@ -2212,7 +2210,7 @@ async function _bootApp() {
 
         // regions — mapped to v2 field names
         regions: {
-          BLR: { vendor: blrVendorRaw, vendor_alt: m.blr_v2||null, lead_time: blrParsed.lead, str_reorder: m.str_reorder_type||null, ordering_frequency: (vm.ord_freq!=null&&vm.ord_freq!==''?parseFloat(vm.ord_freq):null), consumption_3mo: parseFloat(c.blr_3)||0 },
+          BLR: { vendor: blrVendorRaw, vendor_alt: m.blr_v2||null, lead_time: blrParsed.lead, str_reorder: m.str_reorder_type||null, ordering_frequency: (m.blr_ordering_frequency!=null&&m.blr_ordering_frequency!==''?parseFloat(m.blr_ordering_frequency):(vm.ord_freq!=null&&vm.ord_freq!==''?parseFloat(vm.ord_freq):null)), consumption_3mo: parseFloat(c.blr_3)||0 },
           CHN: { vendor: m.chn_v1||null, vendor_alt: m.chn_v2||null, lead_time: m.chn_lead_time!=null?parseFloat(m.chn_lead_time):null, str_reorder: m.chn_str_reorder||null, ordering_frequency: m.chn_ordering_frequency||null, consumption_3mo: parseFloat(c.chn_3)||0 },
           HYD: { vendor: m.hyd_v1||null, vendor_alt: null, lead_time: m.hyd_lead_time!=null?parseFloat(m.hyd_lead_time):null, str_reorder: m.hyd_str_reorder||null, ordering_frequency: m.hyd_ordering_frequency||null, consumption_3mo: parseFloat(c.hyd_3)||0 },
           NCR: { vendor: m.ncr_v1||null, vendor_alt: m.ncr_v2||null, lead_time: m.ncr_lead_time!=null?parseFloat(m.ncr_lead_time):null, str_reorder: m.ncr_str_reorder||null, ordering_frequency: m.ncr_ordering_frequency||null, consumption_3mo: parseFloat(c.ncr_3)||0 },
@@ -2436,6 +2434,10 @@ async function editMaterialField(sku, field, value) {
     else if (field === 'ncr_lead_time') row.regions.NCR.lead_time = parseFloat(value)||null;
     else if (field === 'hyd_lead_time') row.regions.HYD.lead_time = parseFloat(value)||null;
     else if (field === 'chn_lead_time') row.regions.CHN.lead_time = parseFloat(value)||null;
+    else if (field === 'blr_ordering_frequency') row.regions.BLR.ordering_frequency = (value===''||value==null)?null:parseFloat(value);
+    else if (field === 'ncr_ordering_frequency') row.regions.NCR.ordering_frequency = (value===''||value==null)?null:parseFloat(value);
+    else if (field === 'hyd_ordering_frequency') row.regions.HYD.ordering_frequency = (value===''||value==null)?null:parseFloat(value);
+    else if (field === 'chn_ordering_frequency') row.regions.CHN.ordering_frequency = (value===''||value==null)?null:parseFloat(value);
     else if (field === 'min_distrbn_qty') row.min_distrbn_qty = (value===''||value==null)?null:parseFloat(value);
     else if (field === 'blr_hub_capacity') row.blr_hub_capacity = (value===''||value==null)?null:parseFloat(value);
     else if (field === 'season') row.season = value;
@@ -2640,18 +2642,22 @@ function openEditModal(sku) {
   const _blrBlock = _showRegion('BLR') ? `
     ${_ef('BLR Vendor','ed-blr',r._blr_vendor_raw,'format: Name-LeadTime e.g. Canvera-3', _eBLR)}
     ${_ef('BLR Vendor 2','ed-blr2',r.blr_v2, '', _eBLR)}
+    ${_ef('BLR Order Frequency (days)','ed-blr-of',r.regions.BLR.ordering_frequency, '', _eBLR)}
     ${_ef('BLR HUB Capacity','ed-hubcap',r.blr_hub_capacity, '', _canEditField('blr_hub_capacity'))}` : '';
   const _ncrBlock = _showRegion('NCR') ? `
     ${_ef('NCR Vendor','ed-ncr',r.regions.NCR.vendor, '', _eNCR)}
     ${_ef('NCR Vendor 2','ed-ncr2',r.ncr_v2, '', _eNCR)}
-    ${_ef('NCR Lead time (days)','ed-ncr-lt',r.regions.NCR.lead_time, '', _eNCR)}` : '';
+    ${_ef('NCR Lead time (days)','ed-ncr-lt',r.regions.NCR.lead_time, '', _eNCR)}
+    ${_ef('NCR Order Frequency (days)','ed-ncr-of',r.regions.NCR.ordering_frequency, '', _eNCR)}` : '';
   const _hydBlock = _showRegion('HYD') ? `
     ${_ef('HYD Vendor','ed-hyd',r.regions.HYD.vendor, '', _eHYD)}
-    ${_ef('HYD Lead time (days)','ed-hyd-lt',r.regions.HYD.lead_time, '', _eHYD)}` : '';
+    ${_ef('HYD Lead time (days)','ed-hyd-lt',r.regions.HYD.lead_time, '', _eHYD)}
+    ${_ef('HYD Order Frequency (days)','ed-hyd-of',r.regions.HYD.ordering_frequency, '', _eHYD)}` : '';
   const _chnBlock = _showRegion('CHN') ? `
     ${_ef('CHN Vendor','ed-chn',r.regions.CHN.vendor, '', _eCHN)}
     ${_ef('CHN Vendor 2','ed-chn2',r.chn_v2, '', _eCHN)}
-    ${_ef('CHN Lead time (days)','ed-chn-lt',r.regions.CHN.lead_time, '', _eCHN)}` : '';
+    ${_ef('CHN Lead time (days)','ed-chn-lt',r.regions.CHN.lead_time, '', _eCHN)}
+    ${_ef('CHN Order Frequency (days)','ed-chn-of',r.regions.CHN.ordering_frequency, '', _eCHN)}` : '';
   body.innerHTML = `
     <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin-bottom:8px">Material Details</div>
     ${_ef('Material Description','ed-desc',r.description, '', P('material_description'))}
@@ -2753,6 +2759,10 @@ document.addEventListener('click', async (e) => {
       const ncrLt = _gv('ed-ncr-lt');
       const hydLt = _gv('ed-hyd-lt');
       const chnLt = _gv('ed-chn-lt');
+      const blrOf = _gv('ed-blr-of');
+      const ncrOf = _gv('ed-ncr-of');
+      const hydOf = _gv('ed-hyd-of');
+      const chnOf = _gv('ed-chn-of');
       const dmoq  = _gv('ed-dmoq');
       const hubcap= _gv('ed-hubcap');
       const season= _gvt('ed-season');
@@ -2785,6 +2795,10 @@ document.addEventListener('click', async (e) => {
       if (ncrLt !== null && ncrLt !== String(r.regions.NCR.lead_time ?? '')) edits.push(editMaterialField(_editSku,'ncr_lead_time', ncrLt===''?null:parseFloat(ncrLt)));
       if (hydLt !== null && hydLt !== String(r.regions.HYD.lead_time ?? '')) edits.push(editMaterialField(_editSku,'hyd_lead_time', hydLt===''?null:parseFloat(hydLt)));
       if (chnLt !== null && chnLt !== String(r.regions.CHN.lead_time ?? '')) edits.push(editMaterialField(_editSku,'chn_lead_time', chnLt===''?null:parseFloat(chnLt)));
+      if (blrOf !== null && blrOf !== String(r.regions.BLR.ordering_frequency ?? '')) edits.push(editMaterialField(_editSku,'blr_ordering_frequency', blrOf===''?null:parseFloat(blrOf)));
+      if (ncrOf !== null && ncrOf !== String(r.regions.NCR.ordering_frequency ?? '')) edits.push(editMaterialField(_editSku,'ncr_ordering_frequency', ncrOf===''?null:parseFloat(ncrOf)));
+      if (hydOf !== null && hydOf !== String(r.regions.HYD.ordering_frequency ?? '')) edits.push(editMaterialField(_editSku,'hyd_ordering_frequency', hydOf===''?null:parseFloat(hydOf)));
+      if (chnOf !== null && chnOf !== String(r.regions.CHN.ordering_frequency ?? '')) edits.push(editMaterialField(_editSku,'chn_ordering_frequency', chnOf===''?null:parseFloat(chnOf)));
 
       await Promise.all(edits);
       msg.style.color = 'var(--green)'; msg.textContent = edits.length ? `Saved ${edits.length} change(s) ✓` : 'No changes';
@@ -3657,6 +3671,15 @@ const PROCUREMENT_TEMPLATE_HEADERS = [
   "Launch Start Date",
   "Season End Date",
 ];
+
+// ── HIDDEN TEMPLATE COLUMNS ───────────────────────────────────────────────
+// Columns listed here are removed from BOTH downloaded templates (full + procurement)
+// to reduce confusion. They are NOT deleted from the system — if a user re-adds the
+// column to their file it still imports normally. To bring a column BACK into the
+// template, simply remove it from this list (or empty the list entirely).
+const HIDDEN_TEMPLATE_COLUMNS = [
+  "BLR HUB Capacity",
+];
 const VALID_CRITICALITY = ["V.High","High","Med","Low"];
 
 // Fields that MUST be filled on every procurement upload row.
@@ -3765,7 +3788,9 @@ function _downloadTemplate() {
 
   // procurement gets the slimmed header set; everyone else gets the full one
   const role = (window._USER || {}).role;
-  const headers = (role === 'procurement') ? PROCUREMENT_TEMPLATE_HEADERS : TEMPLATE_HEADERS;
+  const baseHeaders = (role === 'procurement') ? PROCUREMENT_TEMPLATE_HEADERS : TEMPLATE_HEADERS;
+  // Drop any columns flagged as hidden (e.g. BLR HUB Capacity) to reduce confusion.
+  const headers = baseHeaders.filter(h => !HIDDEN_TEMPLATE_COLUMNS.includes(h));
   const sample = headers.map(h => (h in SAMPLE ? SAMPLE[h] : ""));
 
   const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
