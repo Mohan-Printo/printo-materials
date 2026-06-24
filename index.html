@@ -2938,30 +2938,24 @@ const MODAL_FORMS = {
     table: 'materials',
     fields: [
       {name:'sku',label:'SKU',type:'text',required:true,half:false},
-      {name:'material_description',label:'Material Description',type:'text',required:true,half:false},
-      {name:'classification',label:'Classification',type:'select',opts:['Class A','Class B','Class C'],half:true},
-      {name:'type',label:'Type',type:'select',opts:['Class A1','Class A2','Class A3','Class B1','Class B2','Class C1'],half:true},
-      {name:'major_category',label:'Major Category',type:'text',half:true},
-      {name:'category',label:'Sub Category',type:'text',half:true},
-      {name:'uom',label:'UOM',type:'text',half:true},
-      {name:'criticality',label:'Criticality',type:'select',opts:['V.High','High','Med','Low'],half:true},
-      {name:'supplier_moq',label:'Supplier MOQ',type:'number',half:true},
-      {name:'str_reorder_type',label:'STR & Reorder Type',type:'text',half:true},
+      {name:'material_description',label:'Description',type:'text',required:true,half:false},
+      {name:'category',label:'Category',type:'text',required:true,half:true},
+      {name:'classification',label:'Classification',type:'select',opts:['Class A','Class B','Class C'],required:true,half:true},
+      {name:'__cities',label:'Cities',type:'multiselect',opts:[['B','BLR'],['C','CHN'],['H','HYD'],['P','PUN'],['D','NCR']],required:true,half:false},
+      {name:'criticality',label:'Criticality',type:'select',opts:['V.High','High','Med','Low'],required:true,half:true},
+      {name:'str_reorder_type',label:'Reorder Type',type:'text',required:true,half:true},
+      {name:'uom',label:'UOM',type:'text',required:true,half:true},
+      {name:'supplier_moq',label:'Supplier MOQ',type:'number',required:true,half:true},
+      {name:'unit_price',label:'Unit Price',type:'number',required:true,half:true},
+      {name:'min_distrbn_qty',label:'Distrbn MOQ',type:'number',required:true,half:true},
+      {name:'blr_v1',label:'Vendor',type:'text',required:true,half:true},
+      {name:'blr_lead_time',label:'Lead Time',type:'number',required:true,half:true},
+      // --- optional ---
       {name:'season',label:'Season',type:'text',half:true},
-      {name:'launch_start',label:'Launch Start Date',type:'date',half:true},
+      {name:'seasonal_consumption',label:'Seasonal Consumption',type:'number',half:true},
+      {name:'launch_start',label:'Season Start Date',type:'date',half:true},
       {name:'season_end',label:'Season End Date',type:'date',half:true},
-      // --- Cities (B/C/H/P/D): mark which cities stock this item ---
-      {name:'blr',label:'BLR (B) — in city?',type:'select',opts:['B','Discontinued'],half:true},
-      {name:'chn',label:'CHN (C) — in city?',type:'select',opts:['C','Discontinued'],half:true},
-      {name:'hyd',label:'HYD (H) — in city?',type:'select',opts:['H','Discontinued'],half:true},
-      {name:'pun',label:'PUN (P) — in city?',type:'select',opts:['P','Discontinued'],half:true},
-      {name:'ncr',label:'NCR (D) — in city?',type:'select',opts:['D','Discontinued'],half:true},
-      // --- City-wise lead times (days). NCR/HYD/CHN existed; BLR/PUN are new fields ---
-      {name:'blr_lead_time',label:'BLR Lead Time (days)',type:'number',half:true},
-      {name:'chn_lead_time',label:'CHN Lead Time (days)',type:'number',half:true},
-      {name:'hyd_lead_time',label:'HYD Lead Time (days)',type:'number',half:true},
-      {name:'pun_lead_time',label:'PUN Lead Time (days)',type:'number',half:true},
-      {name:'ncr_lead_time',label:'NCR Lead Time (days)',type:'number',half:true},
+      {name:'blr_v2',label:'Vendor-2',type:'text',half:true},
     ]
   },
   vm_params: {
@@ -3023,7 +3017,15 @@ function _renderModalForm(tab){
     const f = fields[i];
     if(!f.half){
       html2 += `<div class="form-row"><label class="form-lbl">${f.label}${f.required?' *':''}</label>`;
-      if(f.type==='select'){
+      if(f.type==='multiselect'){
+        html2 += `<div class="form-multiselect" data-name="${f.name}" style="display:flex;flex-wrap:wrap;gap:14px;padding:4px 0">`
+          + f.opts.map(o=>{
+              const val = Array.isArray(o)?o[0]:o;
+              const lab = Array.isArray(o)?o[1]:o;
+              return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:500"><input type="checkbox" class="form-ms-chk" data-group="${f.name}" value="${val}" style="width:16px;height:16px;cursor:pointer">${lab} (${val})</label>`;
+            }).join('')
+          + `</div>`;
+      } else if(f.type==='select'){
         html2 += `<select class="form-inp form-select" name="${f.name}"><option value="">Select...</option>${f.opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
       } else {
         html2 += `<input class="form-inp" type="${f.type}" name="${f.name}" placeholder="${f.label}"${f.readonly?' readonly style="opacity:.8;cursor:not-allowed"':''}>`;
@@ -3101,31 +3103,46 @@ document.getElementById('modal-save').addEventListener('click', async ()=>{
   const inputs = document.querySelectorAll('#modal-body .form-inp');
   const record = {};
   inputs.forEach(inp=>{ if(inp.value.trim()) record[inp.name] = inp.type==='number' ? parseFloat(inp.value) : inp.value.trim(); });
+  // Collect multiselect groups (e.g. Cities) -> array of selected values
+  const msSelected = {};   // groupName -> [values]
+  document.querySelectorAll('#modal-body .form-ms-chk:checked').forEach(chk=>{
+    const g = chk.getAttribute('data-group');
+    (msSelected[g] = msSelected[g] || []).push(chk.value);
+  });
+  const msName = {};       // map letter -> materials flag field
+  const LETTER_FLAG = { B:'blr', C:'chn', H:'hyd', P:'pun', D:'ncr' };
   const msg = document.getElementById('form-msg');
   msg.className = 'form-msg';
-  if(!record[form.fields.find(f=>f.required)?.name]){
-    msg.textContent = 'Please fill in the required fields (*)';
+
+  // ── Mandatory validation: every field with required:true must be filled ──
+  const missing = [];
+  form.fields.forEach(f=>{
+    if(!f.required) return;
+    if(f.type==='multiselect'){
+      if(!(msSelected[f.name] && msSelected[f.name].length)) missing.push(f.label);
+    } else if(!record[f.name] && record[f.name]!==0){
+      missing.push(f.label);
+    }
+  });
+  if(missing.length){
+    msg.textContent = 'Please fill required field(s): ' + missing.join(', ');
     msg.className = 'form-msg err'; return;
   }
+  // Cities multiselect -> set the 5 flag fields (selected = letter, else cleared)
+  if(_curTab==='material'){
+    const chosen = msSelected['__cities'] || [];
+    Object.keys(LETTER_FLAG).forEach(L=>{
+      record[LETTER_FLAG[L]] = chosen.includes(L) ? L : '';
+    });
+  }
+  delete record.__cities;
+
   const saveBtn = document.getElementById('modal-save');
   saveBtn.textContent = 'Saving...'; saveBtn.disabled = true;
   let error=null;
   try {
     const {collection, addDoc, doc, setDoc} = window._fsApi;
-    // For 'material' tab: use SKU as doc ID so re-saving same SKU overwrites (no duplicates).
-    // Also restructure flat city lead-time fields into nested regions.X.lead_time format.
     if (_curTab === 'material' && record.sku) {
-      const CITY_KEYS = ['BLR','CHN','HYD','PUN','NCR'];
-      const regionData = {};
-      CITY_KEYS.forEach(city => {
-        const ltField = city.toLowerCase() + '_lead_time';
-        const ltVal = record[ltField];
-        if (ltVal != null) {
-          regionData[city] = { lead_time: ltVal };
-          delete record[ltField];
-        }
-      });
-      if (Object.keys(regionData).length) record.regions = regionData;
       await setDoc(doc(window._FS, form.table, record.sku), record, { merge: true });
     } else {
       await addDoc(collection(window._FS, form.table), record);
@@ -3805,9 +3822,22 @@ function _downloadTemplate() {
     "Launch End Date": "2024-12-31",
   };
 
-  // procurement gets the slimmed header set; everyone else gets the full one
+  // procurement gets the NEW simplified 19-col template; everyone else the full one
   const role = (window._USER || {}).role;
-  const baseHeaders = (role === 'procurement') ? PROCUREMENT_TEMPLATE_HEADERS : TEMPLATE_HEADERS;
+  if (role === 'procurement') {
+    const PROC_HEADERS = ["SKU","Description","Category","Classification","Criticality","Reorder Type","UOM",
+      "Supplier MOQ","Unit Price","Distrbn MOQ","Vendor-1","Lead Time",
+      "Cities","Consumption / Month","Season","Seasonal Consumption",
+      "Season Start Date","Season End Date","Vendor-2"];
+    const PROC_SAMPLE = ["ACRPRP1","Acrylic Baggage Tag Clear 2mm 85mmx55mm","Acrylic Products","Class A","Med","Hub/Req","nos",
+      144,18.5,10,"Canvera-3",3,"B,C,H,P,D",120,"New launch",25,"2024-04-01","2024-12-31","Vendor-X"];
+    const wsP = XLSX.utils.aoa_to_sheet([PROC_HEADERS, PROC_SAMPLE]);
+    const wbP = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wbP, wsP, "Materials Upload");
+    XLSX.writeFile(wbP, "material_upload_template.xlsx");
+    return;
+  }
+  const baseHeaders = TEMPLATE_HEADERS;
   // Drop any columns flagged as hidden (e.g. BLR HUB Capacity) to reduce confusion.
   const headers = baseHeaders.filter(h => !HIDDEN_TEMPLATE_COLUMNS.includes(h));
   const sample = headers.map(h => (h in SAMPLE ? SAMPLE[h] : ""));
