@@ -1520,7 +1520,14 @@ document.body.addEventListener("click",(e)=>{
   if(!e.target.closest(".menu")&&!e.target.closest(".tab")&&!e.target.closest(".config-pill"))closeAllMenus();
 });
 
-document.getElementById("search").addEventListener("input",e=>{state.search=e.target.value.trim();if(state.view==="analytics")renderAnalytics();else renderTable()});
+let _searchDebounce=null;
+document.getElementById("search").addEventListener("input",e=>{
+  state.search=e.target.value.trim();
+  clearTimeout(_searchDebounce);
+  _searchDebounce=setTimeout(()=>{
+    if(state.view==="analytics")renderAnalytics();else renderTable();
+  },250);
+});
 document.addEventListener("keydown",e=>{
   if((e.metaKey||e.ctrlKey)&&e.key==="k"){e.preventDefault();document.getElementById("search").focus();document.getElementById("search").select()}
   if(e.key==="Escape"){closeAllMenus();document.getElementById("search").value="";state.search="";if(state.view==="analytics")renderAnalytics();else renderTable()}
@@ -4791,13 +4798,16 @@ function _redrawOverviewTable(regionKey) {
 }
 
 // Search input handler
+let _overviewDebounce = null;
 document.body.addEventListener('input', function(e) {
   if (e.target.id === 'overview-search') {
     _overviewFilter = e.target.value.trim();
-    // Get current region from state
-    if (state.region && !['all','multi','single'].includes(state.region)) {
-      _redrawOverviewTable(state.region);
-    }
+    clearTimeout(_overviewDebounce);
+    _overviewDebounce = setTimeout(function() {
+      if (state.region && !['all','multi','single'].includes(state.region)) {
+        _redrawOverviewTable(state.region);
+      }
+    }, 250);
   }
 });
 
