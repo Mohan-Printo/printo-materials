@@ -3820,6 +3820,85 @@ function _downloadTemplate() {
 
 function _toNum(v){ if(v===''||v==null) return null; const n=parseFloat(String(v).replace(/,/g,'')); return isNaN(n)?v:n; }
 
+// ── NEW PROCUREMENT TEMPLATE (16-col) SUPPORT ─────────────────────────────
+// The simplified procurement template uses friendlier headers and a single
+// "Cities" column. We detect it and translate each row into the column names
+// the existing parser/engine already understands, so the proven validation +
+// save path is reused unchanged.
+//   Vendor-1 -> BLR Vendor (blr_v1) ;  Lead Time -> blr_lead_time
+//   Vendor-2 -> BLR Vendor 2 (blr_v2)
+//   Cities "B,C,H,P,D" -> the 5 flag columns
+//   Season Start Date -> Launch Start Date ;  Season End Date kept
+const PROC16_MANDATORY = ["Description","Category","Classification","Criticality","Reorder Type","UOM",
+  "Supplier MOQ","Unit Price","Distrbn MOQ","Vendor-1","Lead Time"];   // (SKU checked separately)
+const PROC16_CITY_MAP = { B:"BLR (B / blank)", C:"CHN (C / blank)", H:"HYD (H / blank)",
+  P:"PUN (P / blank)", D:"NCR (D / blank)" };
+const PROC16_CITY_LETTER = { B:"B", C:"C", H:"H", P:"P", D:"D" };
+
+function _isProc16(headers){
+  // Signature columns unique to the new template
+  return headers.includes('Description') && headers.includes('Vendor-1')
+      && headers.includes('Cities') && !headers.includes('Material Description');
+}
+
+function _translateProc16Row(row){
+  // returns { translated, error }  — error is a string if the row is invalid
+  const t = {};
+  const get = k => String(row[k] == null ? '' : row[k]).trim();
+
+  // 1) mandatory presence
+  const missing = [];
+  if (!get('SKU')) missing.push('SKU');
+  PROC16_MANDATORY.forEach(h => { if (!get(h)) missing.push(h); });
+
+  // 2) straightforward renames -> engine column names
+  t['SKU'] = get('SKU');
+  t['Material Description'] = get('Description');
+  t['Category'] = get('Category');
+  t['Classification'] = get('Classification');
+  t['Criticality'] = get('Criticality');
+  t['Reorder Type'] = get('Reorder Type');
+  t['UOM'] = get('UOM');
+  t['Supplier MOQ'] = get('Supplier MOQ');
+  t['Unit Price'] = get('Unit Price');
+  t['Distrbn MOQ'] = get('Distrbn MOQ');
+  // BLR vendor + lead time
+  t['BLR Vendor (Name-LeadTime)'] = get('Vendor-1');
+  t['blr_lead_time__direct'] = get('Lead Time');   // handled specially below
+  // optional
+  if (get('Vendor-2')) t['BLR Vendor 2'] = get('Vendor-2');
+  if (get('Seasonal Consumption')) t['Seasonal Consumption'] = get('Seasonal Consumption');
+  if (get('Season')) t['Season'] = get('Season');
+  if (get('Consumption / Month')) t['Consumption Per Month'] = get('Consumption / Month');
+
+  // 3) Cities -> 5 flag columns
+  const cities = get('Cities').toUpperCase();
+  if (cities){
+    const letters = cities.split(/[, ]+/).filter(Boolean);
+    for (const L of letters){
+      const col = PROC16_CITY_MAP[L];
+      if (!col) return { error:`Cities has unknown code "${L}" — use B,C,H,P,D` };
+      t[col] = PROC16_CITY_LETTER[L];
+    }
+  }
+
+  // 4) Season Start/End rule
+  const start = get('Season Start Date');
+  const end   = get('Season End Date');
+  if (start){
+    t['Launch Start Date'] = start;
+    if (!end) return { error:`Season Start Date is filled, so Season End Date is required` };
+    t['Season End Date'] = end;
+  } else {
+    // blank start -> auto-stamp today's upload date
+    t['Launch Start Date'] = new Date().toISOString().slice(0,10);
+    if (end) t['Season End Date'] = end;
+  }
+
+  if (missing.length) return { error:`missing required field(s) — ${missing.join(', ')}` };
+  return { translated: t };
+}
+
 function _parseUpload(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -3837,8 +3916,22 @@ function _parseUpload(file) {
     const missingKey = !fileHeaders.includes('SKU');
     if (missingKey) { _showUploadError('The file must have a "SKU" column. Please use the template.'); return; }
 
+    // New 16-col procurement template? Translate every row into engine columns first.
+    const proc16 = _isProc16(fileHeaders);
+    const proc16Errors = [];   // row-level errors found during translation
+    if (proc16) {
+      const translatedRows = [];
+      rows.forEach((row, i) => {
+        const rowNum = i + 2;
+        const { translated, error } = _translateProc16Row(row);
+        if (error) { proc16Errors.push(`Row ${rowNum} (${String(row['SKU']||'').trim()||'no SKU'}): ${error}`); return; }
+        translatedRows.push(translated);
+      });
+      rows = translatedRows;   // engine now sees familiar column names
+    }
+
     const existingSkus = new Set(DATA.map(r => r.sku));
-    const parsed = [], errors = [], warnings = [];
+    const parsed = [], errors = proc16 ? proc16Errors.slice() : [], warnings = [];
     let updates=0, news=0;
 
     rows.forEach((row, i) => {
@@ -3936,6 +4029,11 @@ function _parseUpload(file) {
         else if (map.c === 'vm_classification') vmDoc[map.f] = val;
       });
       matDoc.sku = sku; vmDoc.sku = sku;
+      // proc16: BLR lead time has no UPLOAD_MAP entry — set it directly
+      if (proc16) {
+        const blt = String(row['blr_lead_time__direct']==null?'':row['blr_lead_time__direct']).trim();
+        if (blt !== '') matDoc.blr_lead_time = _toNum(blt);
+      }
       const isUpdate = existingSkus.has(sku);
       isUpdate ? updates++ : news++;
       parsed.push({ sku, isUpdate, matDoc, vmDoc });
