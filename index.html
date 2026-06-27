@@ -160,6 +160,7 @@
     color:var(--text);
     font-size:14px;line-height:1.5;font-weight:400;
     -webkit-font-smoothing:antialiased;
+    zoom:0.8;  /* load the page at 80% (matches manual Chrome zoom-out) */
   }
 
   /* ===== TOPBAR ===== */
@@ -1289,7 +1290,12 @@ function regionMatrixHTML(r){
     return`<div class="region-col ${isOn?"":"inactive"}">
       <div class="region-col-head">
         <div class="region-col-name">${reg.name}</div>
-        <div class="region-col-flag ${isOn?"flag-on":isDisc?"flag-disc":""}">${isOn?"Stocked":isDisc?"Discontinued":"Not stocked"}</div>
+        <div class="region-col-flag ${isOn?"flag-on":isDisc?"flag-disc":""}">${
+          isDisc ? "Discontinued"
+          : !isOn ? "Not stocked"
+          : (info.vendor === "CS") ? "Source from CS"
+          : "Source in " + reg.key
+        }</div>
       </div>
       <dl>
         <div><dt>Stock</dt><dd ${info.stock==null?'class="empty"':""}>${info.stock!=null?`<span class="num-val">${fmtNum(info.stock)}</span> ${r.uom||""}`:"—"}${info.stock_synced_at?`<span style="display:block;font-size:10px;color:var(--text-4)">as of ${new Date(info.stock_synced_at).toLocaleDateString()}</span>`:""}</dd></div>
@@ -1489,9 +1495,8 @@ document.body.addEventListener("click",(e)=>{
     else if(action==="region"){
       // Region users are locked to their own region — ignore attempts to switch
       if(['region','region_inventory'].includes((window._USER||{}).role)){ closeAllMenus(); return; }
-      closeAllMenus();
-      showRegionDashboard(value);
-      return;
+      // Just filter the normal materials table to this region (no separate dashboard).
+      state.region = value;
     }
     else if(action==="criticality")state.criticality=value;
     else if(action==="status"){
@@ -1520,14 +1525,7 @@ document.body.addEventListener("click",(e)=>{
   if(!e.target.closest(".menu")&&!e.target.closest(".tab")&&!e.target.closest(".config-pill"))closeAllMenus();
 });
 
-let _searchDebounce=null;
-document.getElementById("search").addEventListener("input",e=>{
-  state.search=e.target.value.trim();
-  clearTimeout(_searchDebounce);
-  _searchDebounce=setTimeout(()=>{
-    if(state.view==="analytics")renderAnalytics();else renderTable();
-  },250);
-});
+// (search input handler consolidated below with debounce + suggestions)
 document.addEventListener("keydown",e=>{
   if((e.metaKey||e.ctrlKey)&&e.key==="k"){e.preventDefault();document.getElementById("search").focus();document.getElementById("search").select()}
   if(e.key==="Escape"){closeAllMenus();document.getElementById("search").value="";state.search="";if(state.view==="analytics")renderAnalytics();else renderTable()}
@@ -2900,9 +2898,11 @@ document.querySelector('.btn').addEventListener('click', function(e){
 
 /* ── SEARCH AUTOCOMPLETE ────────────────────── */
 const _sugs = document.getElementById('search-sugs');
+let _searchRenderTimer = null;
 document.getElementById('search').addEventListener('input', function(e){
   const q = this.value.trim().toLowerCase();
   state.search = q;
+  // Suggestions are light (max 8) — update them immediately for responsiveness.
   if(q.length >= 1 && DATA.length > 0){
     const hits = DATA.filter(r=>
       r.sku.toLowerCase().includes(q) ||
@@ -2923,7 +2923,12 @@ document.getElementById('search').addEventListener('input', function(e){
   } else {
     _sugs.classList.remove('open');
   }
-  if(state.view==='analytics')renderAnalytics();else renderTable();
+  // The full table re-render of ~2,800 rows is heavy — debounce it so it runs
+  // once after the user pauses typing (250ms), instead of on every keystroke.
+  clearTimeout(_searchRenderTimer);
+  _searchRenderTimer = setTimeout(()=>{
+    if(state.view==='analytics')renderAnalytics();else renderTable();
+  }, 250);
 });
 _sugs.addEventListener('click', e=>{
   const item = e.target.closest('.sug-item');
@@ -4798,16 +4803,13 @@ function _redrawOverviewTable(regionKey) {
 }
 
 // Search input handler
-let _overviewDebounce = null;
 document.body.addEventListener('input', function(e) {
   if (e.target.id === 'overview-search') {
     _overviewFilter = e.target.value.trim();
-    clearTimeout(_overviewDebounce);
-    _overviewDebounce = setTimeout(function() {
-      if (state.region && !['all','multi','single'].includes(state.region)) {
-        _redrawOverviewTable(state.region);
-      }
-    }, 250);
+    // Get current region from state
+    if (state.region && !['all','multi','single'].includes(state.region)) {
+      _redrawOverviewTable(state.region);
+    }
   }
 });
 
