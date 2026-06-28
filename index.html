@@ -1272,7 +1272,7 @@ function renderHead(){
   if(isSpecificRegion()){
     thead.innerHTML=`<tr><th style="width:110px">SKU</th><th>Description</th><th style="width:160px">Vendor</th><th class="num" style="width:90px">Lead Time</th><th style="width:140px">Reorder Type</th><th class="num" style="width:120px">3-Mo Cons.</th><th style="width:100px">Criticality</th><th class="num" style="width:90px">Stock</th></tr>`;
   }else{
-    thead.innerHTML=`<tr><th style="width:100px">SKU</th><th>Description</th><th style="width:150px">Category</th><th style="width:120px">Cities</th><th style="width:85px">Criticality</th><th class="num" style="width:80px">Stock</th><th class="num" style="width:110px">Cons. / Month</th><th style="width:120px">Reorder Type</th><th class="num" style="width:120px">Stock After Adjusted</th><th style="width:90px"></th></tr>`;
+    thead.innerHTML=`<tr><th style="width:100px">SKU</th><th>Description</th><th style="width:150px">Category</th><th style="width:120px">Cities</th><th style="width:85px">Criticality</th><th class="num" style="width:90px">Live Stock</th><th class="num" style="width:110px">Cons. / Month</th><th style="width:120px">Reorder Type</th><th class="num" style="width:120px">Stock After Adjusted</th><th style="width:90px"></th></tr>`;
   }
 }
 
@@ -2976,14 +2976,15 @@ const MODAL_FORMS = {
       {name:'sku',label:'SKU',type:'text',required:true,half:false},
       {name:'avg_unit_price',label:'Avg Unit Price',type:'number',half:true},
       // {name:'cnsump_value',label:'Consumption Value',type:'number',half:true}, // HIDDEN from UI by request — still saved/used in DB; un-comment to show again
-      {name:'min_qty',label:'Min Qty',type:'number',half:true},
-      {name:'max_qty',label:'Max Qty',type:'number',half:true},
-      {name:'min_val',label:'Min Value',type:'number',half:true},
-      {name:'max_val',label:'Max Value',type:'number',half:true},
-      {name:'buffer_lead_time',label:'Buffer Lead Time',type:'number',half:true},
+      // ── Fields below HIDDEN from UI by request (still in DB / used by Min-Max calc). Un-comment to show again. ──
+      // {name:'min_qty',label:'Min Qty',type:'number',half:true},
+      // {name:'max_qty',label:'Max Qty',type:'number',half:true},
+      // {name:'min_val',label:'Min Value',type:'number',half:true},
+      // {name:'max_val',label:'Max Value',type:'number',half:true},
+      // {name:'buffer_lead_time',label:'Buffer Lead Time',type:'number',half:true},
       {name:'ord_freq',label:'Order Frequency (days)',type:'number',half:true},
       {name:'seasonal_consumption',label:'Seasonal Consumption',type:'number',half:true},
-      {name:'helper',label:'Helper Key',type:'text',half:false},
+      // {name:'helper',label:'Helper Key',type:'text',half:false}, // HIDDEN from UI by request — still in DB / used for uncertainty-buffer lookup; un-comment to show again
     ]
   },
   vendor: {
