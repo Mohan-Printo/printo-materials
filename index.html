@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">  
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Materials — Printo Operations</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1065,7 +1065,7 @@
       <button class="mtab active" data-mtab="material">Material</button>
       <button class="mtab" data-mtab="vm_params">VM Classification</button>
       <button class="mtab" data-mtab="vendor">Vendor</button>
-      <button class="mtab" data-mtab="consumption">Consumption 2025</button>
+      <!-- <button class="mtab" data-mtab="consumption">Consumption 2025</button> --> <!-- HIDDEN from UI by request — consumption_2025 form/data kept; un-comment to restore -->
     </div>
     <div class="modal-body" id="modal-body"></div>
     <div class="modal-ft">
@@ -3133,12 +3133,9 @@ document.getElementById('modal-save').addEventListener('click', async ()=>{
   msg.className = 'form-msg';
 
   // ── Mandatory validation: every field with required:true must be filled ──
-  // EXCEPT for the commercial role, which only needs SKU (everything else optional).
-  const _commercialRelaxed = ((window._USER||{}).role === 'commercial');
   const missing = [];
   form.fields.forEach(f=>{
     if(!f.required) return;
-    if(_commercialRelaxed && f.name !== 'sku') return;   // commercial: only SKU required
     if(f.type==='multiselect'){
       if(!(msSelected[f.name] && msSelected[f.name].length)) missing.push(f.label);
     } else if(!record[f.name] && record[f.name]!==0){
@@ -3898,12 +3895,9 @@ function _translateProc16Row(row){
   const get = k => String(row[k] == null ? '' : row[k]).trim();
 
   // 1) mandatory presence
-  // Commercial role: only SKU is required. All other roles: full mandatory list.
   const missing = [];
   if (!get('SKU')) missing.push('SKU');
-  if ((window._USER||{}).role !== 'commercial') {
-    PROC16_MANDATORY.forEach(h => { if (!get(h)) missing.push(h); });
-  }
+  PROC16_MANDATORY.forEach(h => { if (!get(h)) missing.push(h); });
 
   // 2) straightforward renames -> engine column names
   t['SKU'] = get('SKU');
@@ -4004,15 +3998,12 @@ function _parseUpload(file) {
       // ── Mandatory-field validation (procurement: every row must be complete) ──
       // Only enforced when the file actually contains these columns, so admin's
       // full template and the procurement template are both handled gracefully.
-      // Commercial role is exempt — only SKU is required for them.
       const _missing = [];
-      if ((window._USER||{}).role !== 'commercial') {
-        MANDATORY_UPLOAD_FIELDS.forEach(h => {
-          if (!(h in row)) return;                       // column not in this file → skip
-          const v = String(row[h] == null ? '' : row[h]).trim();
-          if (v === '') _missing.push(h);
-        });
-      }
+      MANDATORY_UPLOAD_FIELDS.forEach(h => {
+        if (!(h in row)) return;                       // column not in this file → skip
+        const v = String(row[h] == null ? '' : row[h]).trim();
+        if (v === '') _missing.push(h);
+      });
       if (_missing.length) {
         errors.push(`Row ${rowNum} (${sku}): missing required field(s) — ${_missing.join(', ')}`);
       }
