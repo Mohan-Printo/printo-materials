@@ -1304,7 +1304,9 @@ function regionMatrixHTML(r){
         <div><dt>Lead Time</dt><dd ${info.lead_time==null?'class="empty"':""}>${info.lead_time!=null?`<span class="num-val">${info.lead_time}</span> days`:"—"}</dd></div>
         <div><dt>Reorder Type</dt><dd>${reorderPill(info.str_reorder)}</dd></div>
         <div><dt>Order Frequency</dt><dd ${info.ordering_frequency==null?'class="empty"':""}>${info.ordering_frequency!=null?`every <span class="num-val">${info.ordering_frequency}</span> days`:"—"}</dd></div>
-        ${reg.key==="BLR"?`<div><dt>HUB Capacity</dt><dd ${r.blr_hub_capacity==null?'class="empty"':""}>${r.blr_hub_capacity!=null?fmtNum(r.blr_hub_capacity):"—"}</dd></div>`:""}
+        ${reg.key==="BLR"?`<div><dt>HUB Capacity</dt><dd ${r.blr_hub_capacity==null?'class="empty"':""}>${r.blr_hub_capacity!=null?fmtNum(r.blr_hub_capacity):"—"}</dd></div>
+        <div><dt>Rack Capacity</dt><dd ${info.rack_capacity==null?'class="empty"':""}>${info.rack_capacity!=null?fmtNum(info.rack_capacity):"—"}</dd></div>
+        <div><dt>Rack Location</dt><dd ${!info.rack_location?'class="empty"':""}>${info.rack_location||"—"}</dd></div>`:""}
       </dl>
     </div>`;
   }).join("")}</div>`;
@@ -2050,12 +2052,12 @@ function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'
 // The actual data-load + dashboard build (runs only after successful auth).
 async function _bootApp() {
   try {
-    let mats, vms, cons, live, ubuf;
+    let mats, vms, cons, live, ubuf, rack;
     const cached = _loadCache();
     if (cached) {
       // Loaded from today's cache — NO Firestore reads
       _prog(60, 'Loading from cache...');
-      mats = cached.mats; vms = cached.vms; cons = cached.cons; live = cached.live || []; ubuf = cached.ubuf || [];
+      mats = cached.mats; vms = cached.vms; cons = cached.cons; live = cached.live || []; ubuf = cached.ubuf || []; rack = cached.rack || [];
       console.log('[CACHE] Loaded from browser cache (0 Firestore reads). Cached on', cached.date);
     } else {
       _prog(20, 'Loading data...');
@@ -2065,11 +2067,12 @@ async function _bootApp() {
         _fetchAll('vm_classification'),
         _fetchAll('consumption_2025'),
         _fetchAll('live_stock').catch(e => { console.warn('live_stock not available:', e.message); return []; }),
-        _fetchAll('uncertainty_buffers').catch(e => { console.warn('uncertainty_buffers not available:', e.message); return []; })
+        _fetchAll('uncertainty_buffers').catch(e => { console.warn('uncertainty_buffers not available:', e.message); return []; }),
+        _fetchAll('rack_info').catch(e => { console.warn('rack_info not available:', e.message); return []; })
       ]);
       _prog(75, 'Processing...');
-      mats = results[0]; vms = results[1]; cons = results[2]; live = results[3]; ubuf = results[4];
-      _saveCache({ mats, vms, cons, live, ubuf });
+      mats = results[0]; vms = results[1]; cons = results[2]; live = results[3]; ubuf = results[4]; rack = results[5];
+      _saveCache({ mats, vms, cons, live, ubuf, rack });
       console.log('[CACHE] Fresh load from Firestore (parallel); cached for today.');
     }
 
@@ -2079,6 +2082,8 @@ async function _bootApp() {
     const cMap    = {};  cons.forEach(r => cMap[r.sku]    = r);
     const liveMap = {};  live.forEach(r => liveMap[r._id] = r);   // live_stock keyed by SKU (doc id)
     window._UBUF = {};  (ubuf||[]).forEach(r => { const k=r.help1||r._id; if(k) window._UBUF[k]=r; });  // uncertainty buffer lookup by Help1
+    // rack_info keyed by "<SKU>_<REGION>"  ->  { rack_capacity, rack_location }
+    const rackMap = {};  (rack||[]).forEach(r => { const sku=r.sku||r._id; const reg=(r.region||'').toUpperCase(); if(sku&&reg) rackMap[`${sku}_${reg}`]=r; });
 
 
     DATA = mats.map(m => {
@@ -2233,11 +2238,11 @@ async function _bootApp() {
 
         // regions — mapped to v2 field names
         regions: {
-          BLR: { vendor: blrVendorRaw, vendor_alt: m.blr_v2||null, lead_time: blrParsed.lead, str_reorder: m.str_reorder_type||null, ordering_frequency: (m.blr_ordering_frequency!=null&&m.blr_ordering_frequency!==''?parseFloat(m.blr_ordering_frequency):(vm.ord_freq!=null&&vm.ord_freq!==''?parseFloat(vm.ord_freq):null)), consumption_3mo: parseFloat(c.blr_3)||0, stock: regionStock.BLR, stock_synced_at: syncedAt },
-          CHN: { vendor: m.chn_v1||null, vendor_alt: m.chn_v2||null, lead_time: m.chn_lead_time!=null?parseFloat(m.chn_lead_time):null, str_reorder: m.chn_str_reorder||null, ordering_frequency: m.chn_ordering_frequency||null, consumption_3mo: parseFloat(c.chn_3)||0, stock: regionStock.CHN, stock_synced_at: regionStockSyncedAt.CHN },
-          HYD: { vendor: m.hyd_v1||null, vendor_alt: null, lead_time: m.hyd_lead_time!=null?parseFloat(m.hyd_lead_time):null, str_reorder: m.hyd_str_reorder||null, ordering_frequency: m.hyd_ordering_frequency||null, consumption_3mo: parseFloat(c.hyd_3)||0, stock: regionStock.HYD, stock_synced_at: regionStockSyncedAt.HYD },
-          NCR: { vendor: m.ncr_v1||null, vendor_alt: m.ncr_v2||null, lead_time: m.ncr_lead_time!=null?parseFloat(m.ncr_lead_time):null, str_reorder: m.ncr_str_reorder||null, ordering_frequency: m.ncr_ordering_frequency||null, consumption_3mo: parseFloat(c.ncr_3)||0, stock: regionStock.NCR, stock_synced_at: regionStockSyncedAt.NCR },
-          PUN: { vendor: null, vendor_alt: null, lead_time: null, str_reorder: null, ordering_frequency: null, consumption_3mo: parseFloat(c.pun_3)||0, stock: regionStock.PUN, stock_synced_at: null }
+          BLR: { vendor: blrVendorRaw, vendor_alt: m.blr_v2||null, lead_time: blrParsed.lead, str_reorder: m.str_reorder_type||null, ordering_frequency: (m.blr_ordering_frequency!=null&&m.blr_ordering_frequency!==''?parseFloat(m.blr_ordering_frequency):(vm.ord_freq!=null&&vm.ord_freq!==''?parseFloat(vm.ord_freq):null)), consumption_3mo: parseFloat(c.blr_3)||0, stock: regionStock.BLR, stock_synced_at: syncedAt, rack_capacity: (rackMap[`${m.sku}_BLR`]||{}).rack_capacity ?? null, rack_location: (rackMap[`${m.sku}_BLR`]||{}).rack_location ?? null },
+          CHN: { vendor: m.chn_v1||null, vendor_alt: m.chn_v2||null, lead_time: m.chn_lead_time!=null?parseFloat(m.chn_lead_time):null, str_reorder: m.chn_str_reorder||null, ordering_frequency: m.chn_ordering_frequency||null, consumption_3mo: parseFloat(c.chn_3)||0, stock: regionStock.CHN, stock_synced_at: regionStockSyncedAt.CHN, rack_capacity: (rackMap[`${m.sku}_CHN`]||{}).rack_capacity ?? null, rack_location: (rackMap[`${m.sku}_CHN`]||{}).rack_location ?? null },
+          HYD: { vendor: m.hyd_v1||null, vendor_alt: null, lead_time: m.hyd_lead_time!=null?parseFloat(m.hyd_lead_time):null, str_reorder: m.hyd_str_reorder||null, ordering_frequency: m.hyd_ordering_frequency||null, consumption_3mo: parseFloat(c.hyd_3)||0, stock: regionStock.HYD, stock_synced_at: regionStockSyncedAt.HYD, rack_capacity: (rackMap[`${m.sku}_HYD`]||{}).rack_capacity ?? null, rack_location: (rackMap[`${m.sku}_HYD`]||{}).rack_location ?? null },
+          NCR: { vendor: m.ncr_v1||null, vendor_alt: m.ncr_v2||null, lead_time: m.ncr_lead_time!=null?parseFloat(m.ncr_lead_time):null, str_reorder: m.ncr_str_reorder||null, ordering_frequency: m.ncr_ordering_frequency||null, consumption_3mo: parseFloat(c.ncr_3)||0, stock: regionStock.NCR, stock_synced_at: regionStockSyncedAt.NCR, rack_capacity: (rackMap[`${m.sku}_NCR`]||{}).rack_capacity ?? null, rack_location: (rackMap[`${m.sku}_NCR`]||{}).rack_location ?? null },
+          PUN: { vendor: null, vendor_alt: null, lead_time: null, str_reorder: null, ordering_frequency: null, consumption_3mo: parseFloat(c.pun_3)||0, stock: regionStock.PUN, stock_synced_at: null, rack_capacity: (rackMap[`${m.sku}_PUN`]||{}).rack_capacity ?? null, rack_location: (rackMap[`${m.sku}_PUN`]||{}).rack_location ?? null }
         },
         _region_stock: regionStock,
         grand_total_consumption: parseFloat(c.grand_total) || 0
@@ -3128,9 +3133,12 @@ document.getElementById('modal-save').addEventListener('click', async ()=>{
   msg.className = 'form-msg';
 
   // ── Mandatory validation: every field with required:true must be filled ──
+  // EXCEPT for the commercial role, which only needs SKU (everything else optional).
+  const _commercialRelaxed = ((window._USER||{}).role === 'commercial');
   const missing = [];
   form.fields.forEach(f=>{
     if(!f.required) return;
+    if(_commercialRelaxed && f.name !== 'sku') return;   // commercial: only SKU required
     if(f.type==='multiselect'){
       if(!(msSelected[f.name] && msSelected[f.name].length)) missing.push(f.label);
     } else if(!record[f.name] && record[f.name]!==0){
@@ -3890,9 +3898,12 @@ function _translateProc16Row(row){
   const get = k => String(row[k] == null ? '' : row[k]).trim();
 
   // 1) mandatory presence
+  // Commercial role: only SKU is required. All other roles: full mandatory list.
   const missing = [];
   if (!get('SKU')) missing.push('SKU');
-  PROC16_MANDATORY.forEach(h => { if (!get(h)) missing.push(h); });
+  if ((window._USER||{}).role !== 'commercial') {
+    PROC16_MANDATORY.forEach(h => { if (!get(h)) missing.push(h); });
+  }
 
   // 2) straightforward renames -> engine column names
   t['SKU'] = get('SKU');
@@ -3993,12 +4004,15 @@ function _parseUpload(file) {
       // ── Mandatory-field validation (procurement: every row must be complete) ──
       // Only enforced when the file actually contains these columns, so admin's
       // full template and the procurement template are both handled gracefully.
+      // Commercial role is exempt — only SKU is required for them.
       const _missing = [];
-      MANDATORY_UPLOAD_FIELDS.forEach(h => {
-        if (!(h in row)) return;                       // column not in this file → skip
-        const v = String(row[h] == null ? '' : row[h]).trim();
-        if (v === '') _missing.push(h);
-      });
+      if ((window._USER||{}).role !== 'commercial') {
+        MANDATORY_UPLOAD_FIELDS.forEach(h => {
+          if (!(h in row)) return;                       // column not in this file → skip
+          const v = String(row[h] == null ? '' : row[h]).trim();
+          if (v === '') _missing.push(h);
+        });
+      }
       if (_missing.length) {
         errors.push(`Row ${rowNum} (${sku}): missing required field(s) — ${_missing.join(', ')}`);
       }
