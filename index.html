@@ -92,7 +92,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged }
+  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   const FIREBASE_CONFIG = {
     apiKey: "AIzaSyCITb5IznWkdftR4Eo4DUfswxe0FFWfSLA",
@@ -110,7 +110,7 @@
   // expose a tiny compat-like wrapper so the rest of the (compat-style) code works unchanged
   window._FS = _fs;
   window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch };
-  window._authApi = { auth: _auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged };
+  window._authApi = { auth: _auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
 <style>
@@ -917,12 +917,18 @@
     <label class="login-label">Email</label>
     <input id="login-email" class="login-input" type="email" autocomplete="username" placeholder="you@printo.in">
     <label class="login-label">Password</label>
-    <input id="login-password" class="login-input" type="password" autocomplete="current-password" placeholder="••••••••">
+    <div style="position:relative">
+      <input id="login-password" class="login-input" type="password" autocomplete="current-password" placeholder="••••••••" style="padding-right:44px">
+      <span id="pw-eye" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;user-select:none;color:#6b7280" title="Show / hide password">👁</span>
+    </div>
+    <div style="text-align:right;margin:-4px 0 12px">
+      <span id="forgot-toggle" style="color:#2563EB;cursor:pointer;font-size:12px;font-weight:600">Forgot password?</span>
+    </div>
     <button id="login-btn" class="login-btn">Sign in</button>
     <button id="signup-btn" class="login-btn" style="display:none;background:#0E7C66">Create account &amp; view report</button>
     <div id="login-error" class="login-error"></div>
     <div style="margin-top:16px;font-size:13px;color:#6b7280;text-align:center">
-      <span id="signup-toggle" style="color:#2563EB;cursor:pointer;font-weight:600">View Report</span>
+      <span id="signup-toggle" style="color:#2563EB;cursor:pointer;font-weight:600">New stakeholder? Create a report-viewer account</span>
       <span id="signin-toggle" style="color:#2563EB;cursor:pointer;font-weight:600;display:none">← Back to sign in</span>
     </div>
   </div>
@@ -1854,7 +1860,7 @@ function _showLogin(errMsg){
   if (ld) ld.style.display = 'none';
   if (lo) lo.style.display = 'flex';
   const e = document.getElementById('login-error');
-  if (e) e.textContent = errMsg || '';
+  if (e) { e.style.color = ''; e.textContent = errMsg || ''; }
   const btn = document.getElementById('login-btn');
   if (btn) btn.disabled = false;
 }
@@ -1935,6 +1941,34 @@ function _wireLogin(){
     }
   };
   if (signupBtn) signupBtn.addEventListener('click', doSignup);
+
+  // ── Show/hide password (eye toggle) ──
+  const pwEye = document.getElementById('pw-eye');
+  if (pwEye) pwEye.addEventListener('click', ()=>{
+    const isPw = passEl.type === 'password';
+    passEl.type = isPw ? 'text' : 'password';
+    pwEye.style.opacity = isPw ? '1' : '0.55';
+  });
+
+  // ── Forgot password (email reset link) ──
+  const forgot = document.getElementById('forgot-toggle');
+  if (forgot) forgot.addEventListener('click', async ()=>{
+    const email = (emailEl.value||'').trim().toLowerCase();
+    const errEl = document.getElementById('login-error');
+    if (!email){ _showLogin('Enter your email above first, then click "Forgot password?".'); return; }
+    try {
+      const { auth, sendPasswordResetEmail } = window._authApi;
+      await sendPasswordResetEmail(auth, email);
+      errEl.style.color = '#0E7C66';
+      errEl.textContent = 'Password reset link sent — check your email (and spam folder).';
+    } catch(err){
+      errEl.style.color = '';
+      const code = err?.code || '';
+      if (code.includes('user-not-found')) _showLogin('No account found with that email.');
+      else if (code.includes('invalid-email')) _showLogin('Please enter a valid email address.');
+      else _showLogin('Could not send reset email. Try again.');
+    }
+  });
 }
 
 async function _doLogout(){
