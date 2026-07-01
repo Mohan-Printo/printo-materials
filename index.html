@@ -92,7 +92,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   const FIREBASE_CONFIG = {
     apiKey: "AIzaSyCITb5IznWkdftR4Eo4DUfswxe0FFWfSLA",
@@ -110,7 +110,7 @@
   // expose a tiny compat-like wrapper so the rest of the (compat-style) code works unchanged
   window._FS = _fs;
   window._fsApi = { collection, getDocs, doc, getDoc, setDoc, addDoc, deleteDoc, query, where, runTransaction, writeBatch };
-  window._authApi = { auth: _auth, signInWithEmailAndPassword, signOut, onAuthStateChanged };
+  window._authApi = { auth: _auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
 <style>
@@ -604,6 +604,31 @@
   .logout-btn:hover{background:rgba(255,255,255,.22)}
   /* hide admin-only controls for region users */
   body.role-region .admin-only{display:none !important;}
+  /* ===== REPORT ROLE: show only the report view, hide the whole app ===== */
+  body.role-report > *:not(#report-view):not(#login-overlay):not(#loading-overlay){display:none !important;}
+  body.role-report{zoom:1;background:var(--surface);}
+  #report-view{max-width:1200px;margin:0 auto;padding:0 0 40px;}
+  .report-header{background:var(--navy);color:#fff;border-radius:0 0 14px 14px;padding:26px 32px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow-md);}
+  .report-title{font-size:30px;font-weight:800;margin:0;letter-spacing:-.02em;}
+  .report-user{display:flex;align-items:center;gap:14px;}
+  .report-user-chip{display:flex;align-items:center;gap:9px;background:#fff;color:var(--navy);padding:8px 14px;border-radius:24px;font-weight:600;font-size:14px;}
+  .report-avatar{background:var(--orange);color:#fff;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;}
+  .report-logout{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;font-size:14px;}
+  .report-logout:hover{background:rgba(255,255,255,.25);}
+  .report-body{padding:26px 32px 0;}
+  .report-search-row{margin:8px 0 6px;}
+  .report-search{width:100%;padding:14px 18px;font-size:15px;border:1.5px solid var(--border);border-radius:10px;outline:none;box-sizing:border-box;font-family:var(--sans);}
+  .report-search:focus{border-color:var(--navy);box-shadow:0 0 0 3px var(--navy-light);}
+  .report-count{color:var(--text-3);font-size:13px;margin:10px 2px 14px;}
+  .report-table-wrap{background:var(--bg);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-sm);}
+  .report-table{width:100%;border-collapse:collapse;font-size:14px;}
+  .report-table thead th{background:var(--navy);color:#fff;text-align:left;padding:14px 16px;font-weight:600;font-size:13px;}
+  .report-table thead th.num{text-align:right;}
+  .report-table tbody td{padding:14px 16px;border-top:1px solid var(--border);color:var(--text);vertical-align:top;}
+  .report-table tbody td.num{text-align:right;font-weight:600;}
+  .report-table tbody tr:hover{background:var(--surface);}
+  .report-sku{color:var(--navy);font-weight:700;}
+  .report-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:var(--surface-2);color:var(--text-3);}
   /* view-only team roles (commercial/inventory until fields assigned): hide edit buttons */
   body.role-viewonly .edit-item-btn, body.role-viewonly #add-material-btn, body.role-viewonly #bulk-upload-btn{display:none !important;}
   /* hide Adjust buttons for users without stock-adjust permission */
@@ -851,6 +876,39 @@
 </head>
 <body>
 
+<!-- ===== REPORT VIEW (only shown for role 'report') ===== -->
+<div id="report-view" style="display:none">
+  <div class="report-header">
+    <div class="report-title-wrap">
+      <h1 class="report-title">Material Classification Tool</h1>
+    </div>
+    <div class="report-user">
+      <div class="report-user-chip"><span id="report-user-avatar" class="report-avatar">U</span><span id="report-user-name">User</span></div>
+      <button id="report-logout" class="report-logout">Logout</button>
+    </div>
+  </div>
+  <div class="report-body">
+    <div class="report-search-row">
+      <input id="report-search" class="report-search" type="text" placeholder="Search by Ratelist Name, SKU, or Material Description...">
+    </div>
+    <div id="report-count" class="report-count"></div>
+    <div class="report-table-wrap">
+      <table class="report-table">
+        <thead><tr>
+          <th style="width:180px">Ratelist Name</th>
+          <th style="width:120px">SKU</th>
+          <th>Material Description</th>
+          <th style="width:70px">UOM</th>
+          <th class="num" style="width:90px">Stock</th>
+          <th style="width:130px">Status</th>
+          <th style="width:220px">Re-order Type</th>
+        </tr></thead>
+        <tbody id="report-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- ===== LOGIN SCREEN ===== -->
 <div class="login-overlay" id="login-overlay" style="display:none">
   <div class="login-card">
@@ -861,7 +919,12 @@
     <label class="login-label">Password</label>
     <input id="login-password" class="login-input" type="password" autocomplete="current-password" placeholder="••••••••">
     <button id="login-btn" class="login-btn">Sign in</button>
+    <button id="signup-btn" class="login-btn" style="display:none;background:#0E7C66">Create account &amp; view report</button>
     <div id="login-error" class="login-error"></div>
+    <div style="margin-top:16px;font-size:13px;color:#6b7280;text-align:center">
+      <span id="signup-toggle" style="color:#2563EB;cursor:pointer;font-weight:600">New stakeholder? Create a report-viewer account</span>
+      <span id="signin-toggle" style="color:#2563EB;cursor:pointer;font-weight:600;display:none">← Back to sign in</span>
+    </div>
   </div>
 </div>
 
@@ -1414,6 +1477,57 @@ function _prioritySort(list){
   });
 }
 
+// ===== REPORT VIEW (role 'report') =====
+// Status calculation is a placeholder for now — fill in the real rule later.
+function _reportStatus(r){
+  // TODO: real calculation (e.g. stock vs Min Qty). For now show a dash.
+  return '—';
+}
+let _reportSearchTimer = null;
+function _renderReport(){
+  const q = (document.getElementById('report-search')?.value || '').trim().toLowerCase();
+  let rows = DATA;
+  if(q){
+    rows = DATA.filter(r =>
+      (r.ratelist_name||'').toLowerCase().includes(q) ||
+      (r.sku||'').toLowerCase().includes(q) ||
+      (r.description||'').toLowerCase().includes(q)
+    );
+  }
+  const tbody = document.getElementById('report-tbody');
+  const cnt = document.getElementById('report-count');
+  if(cnt) cnt.textContent = q ? `Found ${rows.length} item${rows.length!==1?'s':''}` : `${DATA.length} materials`;
+  if(!tbody) return;
+  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:30px">No matching materials</td></tr>`; return; }
+  // cap render for performance; search narrows it down
+  const show = rows.slice(0, 500);
+  tbody.innerHTML = show.map(r => `
+    <tr>
+      <td>${r.ratelist_name||'—'}</td>
+      <td class="report-sku">${r.sku||''}</td>
+      <td>${r.description||'—'}</td>
+      <td>${r.uom||'—'}</td>
+      <td class="num">${(r.adjusted_count!=null?r.adjusted_count:r.closing_stock)!=null?fmtNum(r.adjusted_count!=null?r.adjusted_count:r.closing_stock):'—'}</td>
+      <td><span class="report-status">${_reportStatus(r)}</span></td>
+      <td>${r.str_reorder_type||'—'}</td>
+    </tr>`).join('') + (rows.length>500?`<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:14px">Showing first 500 of ${rows.length} — refine your search</td></tr>`:'');
+}
+function _initReportView(){
+  const u = window._USER || {};
+  const email = u.email || '';
+  const shortName = email ? email.split('@')[0] : 'User';
+  const nm = document.getElementById('report-user-name');
+  const av = document.getElementById('report-user-avatar');
+  if(nm) nm.textContent = shortName;
+  if(av) av.textContent = (shortName[0]||'U').toUpperCase();
+  const lg = document.getElementById('report-logout');
+  if(lg) lg.addEventListener('click', _doLogout);
+  const s = document.getElementById('report-search');
+  if(s) s.addEventListener('input', ()=>{ clearTimeout(_reportSearchTimer); _reportSearchTimer=setTimeout(_renderReport,250); });
+  document.getElementById('report-view').style.display = 'block';
+  _renderReport();
+}
+
 function renderTable(){
   renderHead();
   const list=_prioritySort(applyFilters());
@@ -1720,12 +1834,14 @@ async function _loadUserProfile(uid, email){
     } catch(e){}
   }
   if (!prof) {
-    // No profile found — treat as no access (safest). Admin must add them to 'users'.
-    return { uid, email, region:null, role:null, _missing:true };
+    // No profile found — default to the read-only report view (stakeholder).
+    return { uid, email, region:null, role:'report' };
   }
   const rawRole = (prof.role || '').toLowerCase().trim();
-  const VALID_ROLES = ['admin','procurement','commercial','inventory','region','region_inventory'];
-  const role = VALID_ROLES.includes(rawRole) ? rawRole : 'region';
+  const DEPT_ROLES = ['admin','procurement','commercial','inventory','region','region_inventory'];
+  // Recognized department/region role → use it. Anything else (report, blank,
+  // unknown) → 'report', which the tool routes to the read-only report page.
+  const role = DEPT_ROLES.includes(rawRole) ? rawRole : 'report';
   const region = prof.region ? String(prof.region).toUpperCase().trim() : null;
   // region matters for the two region-scoped roles; team/admin roles see all regions
   const _regionScoped = (role === 'region' || role === 'region_inventory');
@@ -1774,6 +1890,51 @@ function _wireLogin(){
   };
   btn.addEventListener('click', doLogin);
   [emailEl, passEl].forEach(el => el && el.addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); }));
+
+  // ── Self sign-up (report-viewer accounts, @printo.in only) ──
+  const signupBtn = document.getElementById('signup-btn');
+  const signupToggle = document.getElementById('signup-toggle');
+  const signinToggle = document.getElementById('signin-toggle');
+  function setMode(signup){
+    btn.style.display = signup ? 'none' : '';
+    signupBtn.style.display = signup ? '' : 'none';
+    signupToggle.style.display = signup ? 'none' : '';
+    signinToggle.style.display = signup ? '' : 'none';
+    document.getElementById('login-error').textContent = '';
+  }
+  if (signupToggle) signupToggle.addEventListener('click', ()=>setMode(true));
+  if (signinToggle) signinToggle.addEventListener('click', ()=>setMode(false));
+
+  const doSignup = async () => {
+    const email = (emailEl.value||'').trim().toLowerCase();
+    const pass = passEl.value||'';
+    if (!email || !pass){ _showLogin('Enter email and password.'); return; }
+    // Domain restriction — stakeholders must use a @printo.in address
+    if (!email.endsWith('@printo.in')){ _showLogin('Only @printo.in email addresses can register.'); return; }
+    if (pass.length < 6){ _showLogin('Password must be at least 6 characters.'); return; }
+    signupBtn.disabled = true;
+    document.getElementById('login-error').textContent = '';
+    try {
+      const { auth, createUserWithEmailAndPassword } = window._authApi;
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      // Write a users doc with NO role -> the tool routes them to the report page.
+      try {
+        const { doc, setDoc } = window._fsApi;
+        await setDoc(doc(window._FS, 'users', cred.user.uid), { email, role: 'report', region: null, self_registered: true });
+        await setDoc(doc(window._FS, 'users', email), { email, role: 'report', region: null, uid: cred.user.uid, self_registered: true });
+      } catch(e){ console.warn('profile write failed (will still default to report):', e.message); }
+      // onAuthStateChanged handles the rest → report page
+    } catch(err){
+      let msg = 'Could not create account.';
+      const code = err?.code || '';
+      if (code.includes('email-already-in-use')) msg = 'This email already has an account — use Sign in instead.';
+      else if (code.includes('invalid-email')) msg = 'Invalid email address.';
+      else if (code.includes('weak-password')) msg = 'Password is too weak (min 6 characters).';
+      _showLogin(msg);
+      signupBtn.disabled = false;
+    }
+  };
+  if (signupBtn) signupBtn.addEventListener('click', doSignup);
 }
 
 async function _doLogout(){
@@ -1795,8 +1956,16 @@ function _applyUserAccessUI(){
   const shortName = email ? email.split('@')[0] : 'User';
   if (nameEl) nameEl.textContent = shortName;
   if (avEl) avEl.textContent = (shortName[0]||'U').toUpperCase();
-  if (u.role === 'admin'){
-    if (badge){ badge.style.display=''; badge.textContent='ADMIN'; badge.style.background='#1B3560'; }
+  // Roles that have their own dedicated views. ANYONE ELSE (other role, or
+  // no role at all — e.g. a stakeholder like jeeva@printo.in) lands on the
+  // read-only report page.
+  const KNOWN_ROLES = ['admin','procurement','commercial','inventory','region','region_inventory'];
+  if (!KNOWN_ROLES.includes(u.role)){
+    document.body.classList.add('role-report');
+    _initReportView();
+    return;   // report/stakeholder users see ONLY the report view
+  }
+  if (u.role === 'admin'){    if (badge){ badge.style.display=''; badge.textContent='ADMIN'; badge.style.background='#1B3560'; }
     if (chip) chip.title = email + ' (Admin — all regions)';
     document.body.classList.add('role-admin');
   } else if (u.role === 'procurement' || u.role === 'commercial' || u.role === 'inventory'){
@@ -2022,11 +2191,14 @@ function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'
       // Logged in — load their profile (region + role)
       const profile = await _loadUserProfile(user.uid, user.email);
       const _teamRoles = ['admin','procurement','commercial','inventory'];
-      const _hasAccess = profile.role && (
+      // Report/stakeholder users (role 'report' or anything not a dept/region role)
+      // are always allowed — they land on the read-only report page.
+      const _isReport = !['admin','procurement','commercial','inventory','region','region_inventory'].includes(profile.role);
+      const _hasAccess = _isReport || (
         _teamRoles.includes(profile.role) ||           // team/admin: no region needed
         ((profile.role === 'region' || profile.role === 'region_inventory') && profile.region)  // region-scoped roles: need a region
       );
-      if (profile._missing || !_hasAccess) {
+      if (!_hasAccess) {
         // Authenticated but no valid role/region assigned → deny, sign out
         await window._authApi.signOut(auth);
         _showLogin('Your account has no access assigned. Contact the admin.');
@@ -2266,6 +2438,7 @@ async function _bootApp() {
       const ov = document.getElementById('loading-overlay');
       if (ov) ov.classList.add('hidden');
       _applyUserAccessUI();
+      if (!['admin','procurement','commercial','inventory','region','region_inventory'].includes((window._USER||{}).role)) return;   // report view already rendered
       populateMenus();
       renderTable();
     }, 350);
