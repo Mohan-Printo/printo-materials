@@ -1855,7 +1855,16 @@ async function _loadUserProfile(uid, email){
   const region = prof.region ? String(prof.region).toUpperCase().trim() : null;
   // region matters for the two region-scoped roles; team/admin roles see all regions
   const _regionScoped = (role === 'region' || role === 'region_inventory');
-  return { uid, email, region: (_regionScoped ? region : (region||null)), role };
+  // IMPORTANT: carry status + self_registered forward so the approval gate in
+  // onAuthStateChanged can actually evaluate them. Script-created team/region
+  // users have no 'status' field → null → gate treats them as approved.
+  return {
+    uid, email,
+    region: (_regionScoped ? region : (region||null)),
+    role,
+    self_registered: prof.self_registered === true,
+    status: prof.status || null
+  };
 }
 
 function _showLogin(errMsg){
