@@ -913,7 +913,7 @@
 <div class="login-overlay" id="login-overlay" style="display:none">
   <div class="login-card">
     <div class="login-logo"><span class="logo-p">p</span><span>rinto</span> &nbsp;materials</div>
-    <div class="login-sub">Sign in to continue</div>
+    <div class="login-sub">Sign in to continue <span style="font-size:10px;color:#c4cad4;margin-left:4px">build 2026-07-02-approval-v2</span></div>
     <label class="login-label">Email</label>
     <input id="login-email" class="login-input" type="email" autocomplete="username" placeholder="you@printo.in">
     <label class="login-label">Password</label>
@@ -928,7 +928,7 @@
     <button id="signup-btn" class="login-btn" style="display:none;background:#0E7C66">Create account &amp; view report</button>
     <div id="login-error" class="login-error"></div>
     <div style="margin-top:16px;font-size:13px;color:#6b7280;text-align:center">
-      <span id="signup-toggle" style="color:#2563EB;cursor:pointer;font-weight:600">View Report</span>
+      <span id="signup-toggle" style="color:#2563EB;cursor:pointer;font-weight:600">New stakeholder? Create a report-viewer account</span>
       <span id="signin-toggle" style="color:#2563EB;cursor:pointer;font-weight:600;display:none">← Back to sign in</span>
     </div>
   </div>
@@ -995,6 +995,8 @@
     </div>
   </div>
 </div>
+
+<!-- (Stakeholder approvals are now shown inside the main Approvals panel) -->
 
 <div class="tabs-row">
   <div class="tabs-inner" id="tabs">
@@ -1072,12 +1074,13 @@
       <div class="page-actions">
         <span id="cache-status" style="font-size:11px;color:var(--text-3);align-self:center;margin-right:4px"></span>
         <button class="btn" id="activity-bell-btn" title="Recent activity" style="position:relative">🔔<span id="activity-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center"></span></button>
-        <button class="btn admin-only" id="approvals-btn" title="Review pending stock adjustments" style="position:relative;display:none">✅ Approvals<span id="approvals-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#B45309;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center"></span></button>
+        <button class="btn admin-only" id="approvals-btn" title="Review pending stock adjustments & stakeholder sign-ups" style="position:relative;display:none">✅ Approvals<span id="approvals-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#B45309;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center"></span></button>
         <button class="btn" id="refresh-data-btn" title="Reload latest data from the database">🔄 Refresh data</button>
         <button class="btn">⬇ Export CSV</button>
         <button class="btn admin-only" id="bulk-upload-btn" title="Upload many materials from the Excel template">⬆ Bulk Upload</button>
         <button class="btn" id="bulk-adjust-btn" title="Upload many stock adjustments at once (SKU / ± amount / reason)" style="display:none">📦 Bulk Adjust</button>
         <button class="btn admin-only" id="perms-btn" title="Manage who can edit which fields">⚙ Permissions</button>
+        <button class="btn admin-only" id="stk-appr-btn" title="(merged into Approvals)" style="display:none"></button>
         <button class="btn primary admin-only" id="add-material-btn">+ Add Material</button>
       </div>
     </div>
@@ -1840,8 +1843,9 @@ async function _loadUserProfile(uid, email){
     } catch(e){}
   }
   if (!prof) {
-    // No profile found — default to the read-only report view (stakeholder).
-    return { uid, email, region:null, role:'report' };
+    // No profile record found. Fail CLOSED: treat as a self-registered user
+    // awaiting approval, so nobody gets in without an approved record.
+    return { uid, email, region:null, role:'report', self_registered:true, status:'pending', _noProfile:true };
   }
   const rawRole = (prof.role || '').toLowerCase().trim();
   const DEPT_ROLES = ['admin','procurement','commercial','inventory','region','region_inventory'];
@@ -1922,14 +1926,21 @@ function _wireLogin(){
     document.getElementById('login-error').textContent = '';
     try {
       const { auth, createUserWithEmailAndPassword } = window._authApi;
+      window._SIGNING_UP = true;   // tell the auth-state gate a registration is in progress
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
-      // Write a users doc with NO role -> the tool routes them to the report page.
+      // Write the pending record (needs admin/Hamsa approval before login).
       try {
         const { doc, setDoc } = window._fsApi;
-        await setDoc(doc(window._FS, 'users', cred.user.uid), { email, role: 'report', region: null, self_registered: true });
-        await setDoc(doc(window._FS, 'users', email), { email, role: 'report', region: null, uid: cred.user.uid, self_registered: true });
-      } catch(e){ console.warn('profile write failed (will still default to report):', e.message); }
-      // onAuthStateChanged handles the rest → report page
+        await setDoc(doc(window._FS, 'users', cred.user.uid), { email, role: 'report', region: null, self_registered: true, status: 'pending', requested_at: new Date().toISOString() });
+        await setDoc(doc(window._FS, 'users', email), { email, role: 'report', region: null, uid: cred.user.uid, self_registered: true, status: 'pending', requested_at: new Date().toISOString() });
+      } catch(e){ console.warn('pending record write failed:', e.message); }
+      // Sign them straight back out — they must wait for approval.
+      try { await window._authApi.signOut(auth); } catch(e){}
+      window._SIGNING_UP = false;
+      _showLogin('You are not a registered user. We\u2019ve sent an approval request to Hamsa. Once she approves, you can log in with the same username and password.');
+      signupBtn.disabled = false;
+      passEl.value = '';
+      return;
     } catch(err){
       let msg = 'Could not create account.';
       const code = err?.code || '';
@@ -2221,9 +2232,23 @@ function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'
     const { auth, onAuthStateChanged } = window._authApi;
     let _booted = false;
     onAuthStateChanged(auth, async (user) => {
+      if (window._SIGNING_UP) return;   // registration flow handles its own messaging
       if (!user) { _showLogin(); return; }
       // Logged in — load their profile (region + role)
       const profile = await _loadUserProfile(user.uid, user.email);
+      console.log('[AUTH GATE] profile:', JSON.stringify(profile));   // diagnostic: shows role/status/self_registered
+      // Self-registered stakeholders need admin approval. Existing team/region
+      // users (created via script) have no 'status' field → treated as approved.
+      const _status = profile.status || 'approved';
+      if (profile.self_registered && _status !== 'approved'){
+        await window._authApi.signOut(auth);
+        if (_status === 'rejected'){
+          _showLogin('Your access request was declined. Please contact the admin.');
+        } else {
+          _showLogin('You are not a registered user. We\u2019ve sent an approval request to Hamsa. Once she approves, you can log in with the same username and password.');
+        }
+        return;
+      }
       const _teamRoles = ['admin','procurement','commercial','inventory'];
       // Report/stakeholder users (role 'report' or anything not a dept/region role)
       // are always allowed — they land on the read-only report page.
@@ -4418,6 +4443,72 @@ document.addEventListener('DOMContentLoaded', () => {
     _renderPermsFields();
     document.getElementById('perms-modal').style.display = 'flex';
   });
+
+  // ── Pending STAKEHOLDER Approvals (admin + Hamsa only) — distinct from stock-adjustment approvals ──
+  const STK_APPROVERS = ['hamsa.v@printo.in'];   // plus any admin
+  window._canApproveStk = function(){
+    const u = window._USER || {};
+    return u.role === 'admin' || STK_APPROVERS.includes((u.email||'').toLowerCase());
+  };
+  window._loadStkPending = async function(){
+    const out = [];
+    try {
+      const { collection, getDocs } = window._fsApi;
+      const snap = await getDocs(collection(window._FS, 'users'));
+      const seen = new Set();
+      snap.forEach(d => {
+        const v = d.data() || {};
+        if (v.self_registered && (v.status||'') === 'pending' && v.email && !seen.has(v.email)){
+          seen.add(v.email);
+          out.push({ id: d.id, email: v.email, uid: v.uid || (d.id.includes('@')?null:d.id), requested_at: v.requested_at });
+        }
+      });
+    } catch(e){ console.warn('load stakeholder pending failed', e.message); }
+    return out;
+  };
+  window._setStkUserStatus = async function(email, uid, status){
+    const { doc, setDoc } = window._fsApi;
+    const patch = { status, reviewed_at: new Date().toISOString(), reviewed_by: (window._USER||{}).email || '' };
+    try { await setDoc(doc(window._FS, 'users', email), patch, { merge:true }); } catch(e){ console.warn(e.message); }
+    if (uid){ try { await setDoc(doc(window._FS, 'users', uid), patch, { merge:true }); } catch(e){ console.warn(e.message); } }
+  };
+  window._renderStkAppr = async function(){
+    const list = document.getElementById('stk-appr-list');
+    if (!list) return;
+    list.innerHTML = '<div style="padding:12px 16px;color:var(--text-3);font-size:13px">Loading…</div>';
+    const pend = await window._loadStkPending();
+    // fold stakeholder count into the main approvals badge
+    try {
+      const badge = document.getElementById('approvals-badge');
+      const adj = Object.keys(window._pendingCache||{}).length;
+      const total = adj + pend.length;
+      if (badge){ if (total){ badge.style.display=''; badge.textContent = total>9?'9+':String(total); } else badge.style.display='none'; }
+    } catch(e){}
+    if (!pend.length){ list.innerHTML = '<div style="padding:12px 16px;color:var(--text-3);font-size:13px">No pending sign-ups.</div>'; return; }
+    list.innerHTML = pend.map(p => {
+      let when=''; try{ when=p.requested_at?new Date(p.requested_at).toLocaleString('en-IN'):''; }catch(e){}
+      return `<div class="stk-appr-row" data-email="${p.email}" data-uid="${p.uid||''}" style="padding:12px 16px;border-bottom:1px solid var(--surface)">
+        <div style="font-weight:600;color:var(--navy);font-size:13px">${p.email}</div>
+        <div style="font-size:11px;color:var(--text-4);margin:2px 0">requested ${when}</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="stk-appr-approve" style="background:var(--green,#1D9E75);color:#fff;border:none;padding:5px 14px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">Approve</button>
+          <button class="stk-appr-reject" style="background:var(--red);color:#fff;border:none;padding:5px 14px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">Reject</button>
+        </div>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.stk-appr-row').forEach(row => {
+      const email = row.getAttribute('data-email');
+      const uid = row.getAttribute('data-uid') || null;
+      row.querySelector('.stk-appr-approve').addEventListener('click', async ()=>{
+        await window._setStkUserStatus(email, uid, 'approved'); window._renderStkAppr();
+      });
+      row.querySelector('.stk-appr-reject').addEventListener('click', async ()=>{
+        if(!confirm('Reject '+email+'? They will be blocked with a declined message.')) return;
+        await window._setStkUserStatus(email, uid, 'rejected'); window._renderStkAppr();
+      });
+    });
+  };
+  // (stakeholder approvals are now shown inside the main Approvals panel)
   const roleSel = document.getElementById('perms-role');
   if (roleSel) roleSel.addEventListener('change', _renderPermsFields);
   document.addEventListener('change', (e) => {
@@ -4574,6 +4665,8 @@ function _approvalsPanelHTML(){
       <button id="approvals-refresh" style="border:none;background:none;color:var(--blue);font-size:12px;cursor:pointer">Refresh</button>
     </div>
     <div id="approvals-list" style="padding:6px 0"><div style="padding:16px;color:var(--text-3);font-size:13px">Loading…</div></div>
+    <div style="padding:10px 16px 6px;border-top:2px solid var(--border);font-weight:700;color:var(--navy);font-size:13px">Stakeholder sign-ups</div>
+    <div id="stk-appr-list" style="padding:0 0 6px"><div style="padding:12px 16px;color:var(--text-3);font-size:13px">Loading…</div></div>
   </div>`;
 }
 
@@ -4604,6 +4697,8 @@ async function _renderApprovals(){
   } catch(e){
     list.innerHTML = `<div style="padding:16px;color:var(--red);font-size:13px">Could not load: ${e.message}</div>`;
   }
+  // also render the stakeholder sign-ups section + combine badge count
+  try { if (window._renderStkAppr) await window._renderStkAppr(); } catch(e){ console.warn('stk render', e.message); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -4614,7 +4709,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // show the button + load badge only for admin
   const _initApprovals = () => {
     if (!(window._USER && window._fsApi)) { setTimeout(_initApprovals, 800); return; }
-    if ((window._USER||{}).role === 'admin') {
+    const u = window._USER || {};
+    const canSee = u.role === 'admin' || (u.email||'').toLowerCase() === 'hamsa.v@printo.in';
+    if (canSee) {
       if (btn) btn.style.display = '';
       _renderApprovals();
     }
