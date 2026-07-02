@@ -2051,7 +2051,7 @@ function _wireLogin(){
       // Sign them straight back out — they must wait for approval.
       try { await window._authApi.signOut(auth); } catch(e){}
       window._SIGNING_UP = false;
-      _showLogin('You are not a registered user. We\u2019ve sent an approval request to Hamsa. Once she approves, you can log in with the same username and password.');
+      _showLogin('You are not a registered user. We\u2019ve sent an approval request to Admin. Once Admin approves, you can log in with the same username and password.');
       signupBtn.disabled = false;
       passEl.value = '';
       return;
