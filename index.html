@@ -913,7 +913,7 @@
 <div class="login-overlay" id="login-overlay" style="display:none">
   <div class="login-card">
     <div class="login-logo"><span class="logo-p">p</span><span>rinto</span> &nbsp;materials</div>
-    <div class="login-sub">Sign in to continue <span style="font-size:10px;color:#c4cad4;margin-left:4px">build 2026-07-02-approval-v2</span></div>
+    <div class="login-sub">Sign in to continue <span style="font-size:10px;color:#c4cad4;margin-left:4px">build 2026-07-02-approval-v3-diag</span></div>
     <label class="login-label">Email</label>
     <input id="login-email" class="login-input" type="email" autocomplete="username" placeholder="you@printo.in">
     <label class="login-label">Password</label>
@@ -1845,8 +1845,10 @@ async function _loadUserProfile(uid, email){
   if (!prof) {
     // No profile record found. Fail CLOSED: treat as a self-registered user
     // awaiting approval, so nobody gets in without an approved record.
+    console.warn('[PROFILE] NO record found for', email, uid, '-> pending (fail closed)');
     return { uid, email, region:null, role:'report', self_registered:true, status:'pending', _noProfile:true };
   }
+  console.warn('[PROFILE] found record:', JSON.stringify(prof));
   const rawRole = (prof.role || '').toLowerCase().trim();
   const DEPT_ROLES = ['admin','procurement','commercial','inventory','region','region_inventory'];
   // Recognized department/region role → use it. Anything else (report, blank,
@@ -2236,7 +2238,13 @@ function _seesAllRegions(){ const r=(window._USER||{}).role; return r!=='region'
       if (!user) { _showLogin(); return; }
       // Logged in — load their profile (region + role)
       const profile = await _loadUserProfile(user.uid, user.email);
-      console.log('[AUTH GATE] profile:', JSON.stringify(profile));   // diagnostic: shows role/status/self_registered
+      console.warn('[AUTH GATE] profile:', JSON.stringify(profile));   // diagnostic
+      try { window._LAST_PROFILE = profile; } catch(e){}
+      // Temporary on-screen diagnostic (remove later): show computed profile briefly
+      try {
+        const dbgEl = document.getElementById('login-error');
+        if (dbgEl) dbgEl.textContent = 'DEBUG: ' + JSON.stringify({role:profile.role, status:profile.status, self:profile.self_registered, noProf:profile._noProfile});
+      } catch(e){}
       // Self-registered stakeholders need admin approval. Existing team/region
       // users (created via script) have no 'status' field → treated as approved.
       const _status = profile.status || 'approved';
