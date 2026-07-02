@@ -503,8 +503,8 @@
   .empty-state{text-align:center;padding:64px 20px;color:var(--text-3);font-size:15px}
 
   /* ===== ANALYTICS ===== */
-  .table-view.hidden,.analytics-view{display:none}
-  .analytics-view.active{display:block}
+  .table-view.hidden,.analytics-view,.history-view{display:none}
+  .analytics-view.active,.history-view.active{display:block}
   .table-view{display:block}
 
   .chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
@@ -1006,6 +1006,7 @@
     <button class="tab" data-menu="criticality" aria-expanded="false">Criticality <span class="chev">▾</span></button>
     <button class="tab" data-menu="status" aria-expanded="false">Status <span class="chev">▾</span></button>
     <button class="tab tab-special" data-tab="analytics">Analytics</button>
+    <button class="tab" data-tab="history" id="tab-history" style="display:none">History</button>
   </div>
 </div>
 
@@ -1125,6 +1126,35 @@
 
     <div class="kpi-strip" id="kpi-strip-ana"></div>
     <div class="chart-grid" id="chart-grid"></div>
+  </div>
+
+  <!-- ===== HISTORY (admin audit log) ===== -->
+  <div class="history-view" id="history-view">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Change History</h1>
+        <div class="page-subtitle">Audit log of edits, uploads, adjustments and approvals</div>
+      </div>
+      <div class="page-actions">
+        <input id="hist-search" type="text" placeholder="Search details or user…" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-width:220px;background:var(--bg);color:var(--text-1)">
+        <select id="hist-type" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);color:var(--text-1)"><option value="all">All actions</option></select>
+        <button class="btn" id="hist-refresh">↺ Refresh</button>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-3);margin:0 0 10px" id="hist-count"></div>
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg)">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--surface);text-align:left">
+            <th style="padding:10px 14px;width:170px;color:var(--text-2);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em">When</th>
+            <th style="padding:10px 14px;width:200px;color:var(--text-2);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em">User</th>
+            <th style="padding:10px 14px;width:150px;color:var(--text-2);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em">Action</th>
+            <th style="padding:10px 14px;color:var(--text-2);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em">Details</th>
+          </tr>
+        </thead>
+        <tbody id="hist-tbody"><tr><td colspan="4" style="padding:24px;color:var(--text-3)">Loading…</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
 <div class="modal-backdrop" id="add-modal">
@@ -1567,6 +1597,7 @@ function renderChips(targetId,emptyId){
 function syncTabs(){
   document.querySelectorAll("#tabs .tab").forEach(t=>t.classList.remove("active"));
   if(state.view==="analytics"){document.querySelector('[data-tab="analytics"]').classList.add("active");return}
+  if(state.view==="history"){const h=document.querySelector('[data-tab="history"]');if(h)h.classList.add("active");return}
   if(state.major||state.category)document.querySelector('[data-menu="categories"]').classList.add("active");
   else if(state.region)document.querySelector('[data-menu="regions"]').classList.add("active");
   else if(state.criticality)document.querySelector('[data-menu="criticality"]').classList.add("active");
@@ -1576,10 +1607,83 @@ function syncTabs(){
 
 function switchView(v){
   state.view=v;
-  document.getElementById("table-view").classList.toggle("hidden",v==="analytics");
-  document.getElementById("analytics-view").classList.toggle("active",v==="analytics");
+  const isAna=v==="analytics", isHist=v==="history";
+  document.getElementById("table-view").classList.toggle("hidden", isAna || isHist);
+  document.getElementById("analytics-view").classList.toggle("active", isAna);
+  const hv=document.getElementById("history-view"); if(hv) hv.classList.toggle("active", isHist);
   syncTabs();
-  if(v==="analytics")renderAnalytics();else renderTable();
+  if(isAna) renderAnalytics();
+  else if(isHist) renderHistory();
+  else renderTable();
+}
+
+// ===== HISTORY (admin audit log) =====
+let _HIST = null;   // cached activity docs (loaded on demand, refreshable)
+function _histIcon(t){
+  return t==='Bulk Upload'?'⬆':t==='New Item'?'➕':t==='Item Deleted'?'🗑'
+    :t==='Bulk Adjustment'?'📦':t && t.indexOf('Adjustment')===0?'📊'
+    :t && t.indexOf('Stakeholder')===0?'👤':t==='Permissions Updated'?'🔑':'✏';
+}
+function _histEsc(s){ return (s==null?'':String(s)).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+async function _fetchHistory(force){
+  if (_HIST && !force) return _HIST;
+  const { collection, getDocs } = window._fsApi;
+  const snap = await getDocs(collection(window._FS, 'activity'));
+  const items = []; snap.forEach(d => items.push(d.data()));
+  items.sort((a,b)=>(b.at||'').localeCompare(a.at||''));
+  _HIST = items;
+  return _HIST;
+}
+function _renderHistoryRows(){
+  const tb = document.getElementById('hist-tbody');
+  const cnt = document.getElementById('hist-count');
+  if(!tb) return;
+  const type = (document.getElementById('hist-type')||{}).value || 'all';
+  const q = ((document.getElementById('hist-search')||{}).value || '').trim().toLowerCase();
+  let rows = _HIST || [];
+  if (type!=='all') rows = rows.filter(r => (r.type||'')===type);
+  if (q) rows = rows.filter(r => ((r.details||'')+' '+(r.user||'')+' '+(r.type||'')).toLowerCase().includes(q));
+  const shown = rows.slice(0, 500);
+  if (cnt) cnt.textContent = rows.length + ' event' + (rows.length===1?'':'s') + (rows.length>500?' (showing newest 500)':'');
+  if (!shown.length){ tb.innerHTML = '<tr><td colspan="4" style="padding:24px;color:var(--text-3)">No matching activity.</td></tr>'; return; }
+  tb.innerHTML = shown.map(r => {
+    let when=''; try{ when = new Date(r.at).toLocaleString('en-IN'); }catch(e){ when = r.at||''; }
+    const details = _histEsc(r.details||'').replace(/\n/g,'<br>');
+    return `<tr style="border-top:1px solid var(--surface)">
+      <td style="padding:10px 14px;color:var(--text-3);white-space:nowrap;vertical-align:top">${_histEsc(when)}</td>
+      <td style="padding:10px 14px;color:var(--text-2);vertical-align:top;word-break:break-word">${_histEsc(r.user||'—')}</td>
+      <td style="padding:10px 14px;vertical-align:top;white-space:nowrap"><span style="font-size:12px;font-weight:600;color:var(--navy)">${_histIcon(r.type)} ${_histEsc(r.type||'Activity')}</span></td>
+      <td style="padding:10px 14px;color:var(--text-1);vertical-align:top;word-break:break-word;line-height:1.5">${details}</td>
+    </tr>`;
+  }).join('');
+}
+function _populateHistTypes(){
+  const sel = document.getElementById('hist-type'); if(!sel) return;
+  const cur = sel.value;
+  const types = Array.from(new Set((_HIST||[]).map(r=>r.type).filter(Boolean))).sort();
+  sel.innerHTML = '<option value="all">All actions</option>' + types.map(t=>`<option value="${_histEsc(t)}">${_histEsc(t)}</option>`).join('');
+  if ([...sel.options].some(o=>o.value===cur)) sel.value = cur;
+}
+let _histWired = false;
+async function renderHistory(){
+  const host = document.getElementById('history-view');
+  if(!host) return;
+  const tb = document.getElementById('hist-tbody');
+  if(!_isAdmin()){ if(tb) tb.innerHTML='<tr><td colspan="4" style="padding:24px;color:var(--text-3)">History is admin-only.</td></tr>'; return; }
+  if(!_histWired){
+    _histWired = true;
+    const s = document.getElementById('hist-search'); if(s) s.addEventListener('input', _renderHistoryRows);
+    const t = document.getElementById('hist-type');   if(t) t.addEventListener('change', _renderHistoryRows);
+    const r = document.getElementById('hist-refresh');
+    if(r) r.addEventListener('click', async ()=>{ if(tb) tb.innerHTML='<tr><td colspan="4" style="padding:24px;color:var(--text-3)">Loading…</td></tr>'; try{ await _fetchHistory(true); _populateHistTypes(); _renderHistoryRows(); }catch(e){ if(tb) tb.innerHTML='<tr><td colspan="4" style="padding:24px;color:var(--red)">Could not load: '+_histEsc(e.message)+'</td></tr>'; } });
+  }
+  try {
+    await _fetchHistory(false);
+    _populateHistTypes();
+    _renderHistoryRows();
+  } catch(e){
+    if(tb) tb.innerHTML = '<tr><td colspan="4" style="padding:24px;color:var(--red)">Could not load history: '+_histEsc(e.message)+'</td></tr>';
+  }
 }
 
 let openMenuId=null;
@@ -1609,6 +1713,7 @@ document.body.addEventListener("click",(e)=>{
     closeAllMenus();
     if(directTab.dataset.tab==="all"){Object.keys(state).forEach(k=>{if(k!=="view")state[k]=(k==="search")?"":null});document.getElementById("search").value="";switchView("table")}
     else if(directTab.dataset.tab==="analytics")switchView("analytics");
+    else if(directTab.dataset.tab==="history")switchView("history");
     return;
   }
   const item=e.target.closest('.menu-item[data-action]');
@@ -2061,6 +2166,9 @@ function _applyUserAccessUI(){
   // Permissions is STRICTLY admin-only.
   const permsBtnEl = document.getElementById('perms-btn');
   if (permsBtnEl) permsBtnEl.style.display = _isAdmin() ? '' : 'none';
+  // History tab: admin-only audit log.
+  const histTabEl = document.getElementById('tab-history');
+  if (histTabEl) histTabEl.style.display = _isAdmin() ? '' : 'none';
   // Add Material: admin always, plus any role granted 'add_material'.
   const addMatEl = document.getElementById('add-material-btn');
   if (addMatEl) addMatEl.style.display = _canAddMaterial() ? '' : 'none';
@@ -4479,6 +4587,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const patch = { status, reviewed_at: new Date().toISOString(), reviewed_by: (window._USER||{}).email || '' };
     try { await setDoc(doc(window._FS, 'users', email), patch, { merge:true }); } catch(e){ console.warn(e.message); }
     if (uid){ try { await setDoc(doc(window._FS, 'users', uid), patch, { merge:true }); } catch(e){ console.warn(e.message); } }
+    try { window._logActivity && window._logActivity(status==='approved'?'Stakeholder Approved':status==='rejected'?'Stakeholder Rejected':'Stakeholder Updated', `${email} → ${status} by ${(window._USER||{}).email||'admin'}`); } catch(e){}
   };
   window._renderStkAppr = async function(){
     const list = document.getElementById('stk-appr-list');
@@ -4544,6 +4653,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const { doc, setDoc } = window._fsApi;
       await setDoc(doc(window._FS, 'config', 'permissions'), { [role]: selected }, { merge: true });
       msg.style.color = '#16a34a'; msg.textContent = '✓ Saved';
+      try { window._logActivity && window._logActivity('Permissions Updated', `Role "${role}" editable fields set to ${selected.length} field(s) by ${(window._USER||{}).email||'admin'}`); } catch(e){}
     } catch(err){
       msg.style.color = '#c0392b'; msg.textContent = 'Save failed: ' + (err.message||err);
     }
