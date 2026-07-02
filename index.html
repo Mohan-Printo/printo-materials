@@ -4684,8 +4684,8 @@ async function _renderApprovals(){
   try {
     const pend = await loadPendingAdjustments();
     if (badge){ if (pend.length){ badge.style.display=''; badge.textContent = pend.length>9?'9+':String(pend.length); } else badge.style.display='none'; }
-    if (!pend.length){ list.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:13px">No pending adjustments.</div>'; return; }
-    list.innerHTML = pend.map(p => {
+    if (!pend.length){ list.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:13px">No pending adjustments.</div>'; }
+    else { list.innerHTML = pend.map(p => {
       let when=''; try{ when=new Date(p.at).toLocaleString('en-IN'); }catch(e){ when=p.at||''; }
       return `<div style="padding:12px 16px;border-bottom:1px solid var(--surface)" data-id="${p._id}">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
@@ -4702,6 +4702,7 @@ async function _renderApprovals(){
     }).join('');
     // stash records for handlers
     window._pendingCache = {}; pend.forEach(p => window._pendingCache[p._id] = p);
+    }
   } catch(e){
     list.innerHTML = `<div style="padding:16px;color:var(--red);font-size:13px">Could not load: ${e.message}</div>`;
   }
