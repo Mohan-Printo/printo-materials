@@ -1167,7 +1167,6 @@
       <button class="mtab active" data-mtab="material">Material</button>
       <button class="mtab" data-mtab="vm_params">VM Classification</button>
       <button class="mtab" data-mtab="vendor">Vendor</button>
-      <button class="mtab" data-mtab="consumption">Consumption 2025</button>
     </div>
     <div class="modal-body" id="modal-body"></div>
     <div class="modal-ft">
@@ -3351,21 +3350,6 @@ const MODAL_FORMS = {
       {name:'payment_days',label:'Payment Days (specific vendors)',type:'number',half:true},
       {name:'conversion_days',label:'Conversion to Usable Size (days)',type:'number',half:true},
       {name:'vendor_plus_ltime',label:'Vendor + Lead Time Label (auto-sum, days)',type:'number',half:false,readonly:true},
-    ]
-  },
-  consumption: {
-    table: 'consumption_2025',
-    fields: [
-      {name:'sku',label:'SKU',type:'text',required:true,half:false},
-      {name:'material_desc',label:'Material Description',type:'text',half:false},
-      {name:'blr_3',label:'BLR 3-Mo Avg',type:'number',half:true},
-      {name:'chn_3',label:'CHN 3-Mo Avg',type:'number',half:true},
-      {name:'hyd_3',label:'HYD 3-Mo Avg',type:'number',half:true},
-      {name:'ncr_3',label:'NCR 3-Mo Avg',type:'number',half:true},
-      {name:'pun_3',label:'PUN 3-Mo Avg',type:'number',half:true},
-      {name:'grand_total',label:'Grand Total',type:'number',half:true},
-      {name:'vm_consumption',label:'VM Consumption',type:'number',half:true},
-      {name:'region_vm',label:'Region VM',type:'text',half:true},
     ]
   }
 };
